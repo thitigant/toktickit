@@ -1,3 +1,4 @@
+```markdown
 # TokTickIT - Full-Stack Hello World Starter (Lab 1)
 
 TokTickIT is an IT service desk application built with React, TypeScript, Express, Prisma, and PostgreSQL.
@@ -12,7 +13,6 @@ toktickit/
 │   └── lab-01/
 ├── .gitignore
 └── README.md
-```
 
 ## Setup Instructions
 
@@ -71,3 +71,5 @@ toktickit/
   ```bash
   cd client && npm test
   ```
+
+```

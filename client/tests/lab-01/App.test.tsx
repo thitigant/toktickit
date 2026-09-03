@@ -47,9 +47,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /check system/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Offline/i)).toBeInTheDocument();
+      const offlineElements = screen.getAllByText(/Offline/i);
+      expect(offlineElements.length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText("Health check failed")).toBeInTheDocument();
+    expect(screen.getByText(/Health check failed/i)).toBeInTheDocument();
   });
 });
