@@ -36,4 +36,38 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Lab 2 — GET /api/requesters/active
+// Returns only active Development Requesters for the selector screen.
+// ---------------------------------------------------------------------------
+app.get("/api/requesters/active", async (_req: Request, res: Response) => {
+  try {
+    const requesters = await getPrisma().requesterUser.findMany({
+      where: { isActive: true },
+      orderBy: { id: "asc" },
+      select: { id: true, name: true, email: true, department: true },
+    });
+    res.status(200).json(requesters);
+  } catch {
+    res.status(500).json({ error: "Failed to retrieve requesters" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Lab 2 — GET /api/related-systems
+// Returns only active Related Systems.
+// ---------------------------------------------------------------------------
+app.get("/api/related-systems", async (_req: Request, res: Response) => {
+  try {
+    const systems = await getPrisma().relatedSystem.findMany({
+      where: { isActive: true },
+      orderBy: { id: "asc" },
+      select: { id: true, name: true, code: true },
+    });
+    res.status(200).json(systems);
+  } catch {
+    res.status(500).json({ error: "Failed to retrieve related systems" });
+  }
+});
+
 export default app;

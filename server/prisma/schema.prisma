@@ -11,15 +11,82 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Issue 3 — Create and seed IT request categories
-// Define a Category model with:
-//   id        Int      @id @default(autoincrement())
-//   name      String   @unique
-//   createdAt DateTime @default(now())
-// Then run:  npx prisma migrate dev --name init
+// Lab 1 Issue 3 — IT request categories
 // ---------------------------------------------------------------------------
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  code      String   @unique @default("")
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Related systems that a ticket can reference
+// ---------------------------------------------------------------------------
+model RelatedSystem {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  code      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Development Requester (simulated user for testing context)
+// ---------------------------------------------------------------------------
+model RequesterUser {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  department String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  tickets    Ticket[]
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — IT Support Ticket
+// ---------------------------------------------------------------------------
+model Ticket {
+  id                Int          @id @default(autoincrement())
+  ticketNumber      String       @unique
+  summary           String
+  description       String
+  requestedPriority String       @default("MEDIUM")
+  itPriority        String       @default("MEDIUM")
+  currentStatus     String       @default("NEW")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  requesterId       Int
+  requester         RequesterUser @relation(fields: [requesterId], references: [id])
+
+  categoryId        Int
+  category          Category      @relation(fields: [categoryId], references: [id])
+
+  relatedSystemId   Int
+  relatedSystem     RelatedSystem @relation(fields: [relatedSystemId], references: [id])
+
+  attachments       Attachment[]
+}
+
+// ---------------------------------------------------------------------------
+// Lab 2 — Ticket Attachment (supports soft removal)
+// ---------------------------------------------------------------------------
+model Attachment {
+  id            Int       @id @default(autoincrement())
+  fileName      String
+  fileSize      Int
+  mimeType      String
+  filePath      String
+  isRemoved     Boolean   @default(false)
+  removedAt     DateTime?
+  removalReason String?
+  createdAt     DateTime  @default(now())
+
+  ticketId      Int
+  ticket        Ticket    @relation(fields: [ticketId], references: [id])
 }
