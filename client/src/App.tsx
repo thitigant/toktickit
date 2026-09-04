@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { checkSystem, getRequesters, Category, RequesterUser } from "./api.js";
 import { CreateTicketForm } from "./components/CreateTicketForm.js";
 import { MyTicketsList } from "./components/MyTicketsList.js";
+import { RequesterTicketDetail } from "./components/RequesterTicketDetail.js";
 
 type ActiveTab = "my-tickets" | "create-ticket" | "check-system";
 
@@ -10,6 +11,7 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [requesters, setRequesters] = useState<RequesterUser[]>([]);
   const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
 
   // System check state
   const [checkState, setCheckState] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -49,6 +51,18 @@ export default function App() {
     }
   }
 
+  const handleRequesterChange = (newId: number) => {
+    setSelectedRequesterId(newId);
+    setSelectedTicketId(null); // Clear active ticket selection on requester switch
+  };
+
+  const handleSelectTab = (newTab: ActiveTab) => {
+    setTab(newTab);
+    if (newTab !== "my-tickets") {
+      setSelectedTicketId(null);
+    }
+  };
+
   const selectedRequester = requesters.find((r) => r.id === selectedRequesterId);
 
   return (
@@ -73,7 +87,7 @@ export default function App() {
                   ? "btn-light text-success fw-bold shadow-sm"
                   : "btn-outline-light"
               }`}
-              onClick={() => setTab("my-tickets")}
+              onClick={() => handleSelectTab("my-tickets")}
             >
               📋 My Tickets
             </button>
@@ -84,7 +98,7 @@ export default function App() {
                   ? "btn-light text-success fw-bold shadow-sm"
                   : "btn-outline-light"
               }`}
-              onClick={() => setTab("create-ticket")}
+              onClick={() => handleSelectTab("create-ticket")}
             >
               ➕ Create Ticket
             </button>
@@ -95,7 +109,7 @@ export default function App() {
                   ? "btn-light text-success fw-bold shadow-sm"
                   : "btn-outline-light"
               }`}
-              onClick={() => setTab("check-system")}
+              onClick={() => handleSelectTab("check-system")}
             >
               ⚙️ System Status
             </button>
@@ -109,7 +123,7 @@ export default function App() {
               className="form-select form-select-sm bg-light text-dark fw-bold border-0"
               style={{ minWidth: 180, cursor: "pointer" }}
               value={selectedRequesterId ?? ""}
-              onChange={(e) => setSelectedRequesterId(Number(e.target.value))}
+              onChange={(e) => handleRequesterChange(Number(e.target.value))}
             >
               {requesters.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -136,13 +150,22 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 1: My Tickets */}
+        {/* Tab 1: My Tickets & Ticket Detail View */}
         {tab === "my-tickets" && selectedRequesterId && (
-          <MyTicketsList
-            requesterId={selectedRequesterId}
-            categories={categories}
-            onCreateTicketClick={() => setTab("create-ticket")}
-          />
+          selectedTicketId ? (
+            <RequesterTicketDetail
+              ticketId={selectedTicketId}
+              requesterId={selectedRequesterId}
+              onBack={() => setSelectedTicketId(null)}
+            />
+          ) : (
+            <MyTicketsList
+              requesterId={selectedRequesterId}
+              categories={categories}
+              onCreateTicketClick={() => handleSelectTab("create-ticket")}
+              onSelectTicket={(id) => setSelectedTicketId(id)}
+            />
+          )
         )}
 
         {/* Tab 2: Create Ticket */}
