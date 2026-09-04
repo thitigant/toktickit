@@ -297,4 +297,325 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Lab 2 — GET /api/tickets/:id
+// Retrieve ticket details owned by the active Requester.
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const rawRequesterId = req.headers["x-requester-id"];
+    if (!rawRequesterId) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header is required"],
+      });
+    }
+
+    const requesterId = parseInt(String(rawRequesterId), 10);
+    if (isNaN(requesterId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header must be a valid number"],
+      });
+    }
+
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Ticket ID must be a valid number"],
+      });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        category: { select: { id: true, name: true, code: true } },
+        relatedSystem: { select: { id: true, name: true, code: true } },
+        requester: { select: { id: true, name: true, email: true, department: true } },
+        attachments: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({
+        statusCode: 404,
+        error: "Not Found",
+        message: "Ticket not found",
+      });
+    }
+
+    // Strict Ownership Check (BR-10)
+    if (ticket.requesterId !== requesterId) {
+      return res.status(403).json({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Access denied to ticket belonging to another requester",
+      });
+    }
+
+    return res.status(200).json(ticket);
+  } catch {
+    return res.status(500).json({ error: "Failed to retrieve ticket details" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Lab 2 — POST /api/tickets/:id/attachments
+// Upload attachment to a ticket owned by the active Requester.
+// ---------------------------------------------------------------------------
+app.post("/api/tickets/:id/attachments", async (req: Request, res: Response) => {
+  try {
+    const rawRequesterId = req.headers["x-requester-id"];
+    if (!rawRequesterId) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header is required"],
+      });
+    }
+
+    const requesterId = parseInt(String(rawRequesterId), 10);
+    if (isNaN(requesterId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header must be a valid number"],
+      });
+    }
+
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Ticket ID must be a valid number"],
+      });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        attachments: { where: { isRemoved: false } },
+      },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({
+        statusCode: 404,
+        error: "Not Found",
+        message: "Ticket not found",
+      });
+    }
+
+    if (ticket.requesterId !== requesterId) {
+      return res.status(403).json({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Access denied to ticket belonging to another requester",
+      });
+    }
+
+    // Limit to 5 active attachments per ticket (BR-07)
+    if (ticket.attachments.length >= 5) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Maximum limit of 5 active attachments per ticket reached"],
+      });
+    }
+
+    const { fileName, fileSize, mimeType, filePath } = req.body ?? {};
+
+    const errors: string[] = [];
+
+    const trimmedFileName = typeof fileName === "string" ? fileName.trim() : "";
+    if (!trimmedFileName) {
+      errors.push("fileName is required");
+    }
+
+    const parsedSize = parseInt(String(fileSize), 10);
+    if (isNaN(parsedSize) || parsedSize <= 0) {
+      errors.push("fileSize must be a positive number");
+    } else if (parsedSize > 5 * 1024 * 1024) {
+      errors.push("File size exceeds maximum allowed limit of 5 MB");
+    }
+
+    const allowedMimeTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ];
+    if (!mimeType || typeof mimeType !== "string" || !allowedMimeTypes.includes(mimeType.toLowerCase())) {
+      errors.push("Allowed file types are JPG, JPEG, PNG, WEBP, and PDF");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: errors,
+      });
+    }
+
+    const attachment = await prisma.attachment.create({
+      data: {
+        ticketId,
+        fileName: trimmedFileName,
+        fileSize: parsedSize,
+        mimeType: mimeType.toLowerCase(),
+        filePath: filePath || `/uploads/${trimmedFileName}`,
+        isRemoved: false,
+      },
+    });
+
+    return res.status(201).json(attachment);
+  } catch {
+    return res.status(500).json({ error: "Failed to upload attachment" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Lab 2 — GET /api/attachments/:id/download
+// Download active attachment file.
+// ---------------------------------------------------------------------------
+app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+  try {
+    const rawRequesterId = req.headers["x-requester-id"];
+    if (!rawRequesterId) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header is required"],
+      });
+    }
+
+    const requesterId = parseInt(String(rawRequesterId), 10);
+    const attachmentId = parseInt(req.params.id, 10);
+    if (isNaN(attachmentId) || isNaN(requesterId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Invalid attachment ID or requester ID"],
+      });
+    }
+
+    const prisma = getPrisma();
+    const attachment = await prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { ticket: { select: { requesterId: true } } },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({
+        statusCode: 404,
+        error: "Not Found",
+        message: "Attachment not found",
+      });
+    }
+
+    if (attachment.ticket.requesterId !== requesterId) {
+      return res.status(403).json({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Access denied to attachment belonging to another requester",
+      });
+    }
+
+    // Soft removal check (BR-09)
+    if (attachment.isRemoved) {
+      return res.status(410).json({
+        statusCode: 410,
+        error: "Gone",
+        message: "Attachment is soft-removed and unavailable for download",
+      });
+    }
+
+    res.setHeader("Content-Disposition", `attachment; filename="${attachment.fileName}"`);
+    res.setHeader("Content-Type", attachment.mimeType);
+    return res.status(200).send(`Binary stream content for file: ${attachment.fileName}`);
+  } catch {
+    return res.status(500).json({ error: "Failed to download attachment" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Lab 2 — DELETE /api/attachments/:id
+// Soft-remove attachment with mandatory removal reason.
+// ---------------------------------------------------------------------------
+app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
+  try {
+    const rawRequesterId = req.headers["x-requester-id"];
+    if (!rawRequesterId) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header is required"],
+      });
+    }
+
+    const requesterId = parseInt(String(rawRequesterId), 10);
+    const attachmentId = parseInt(req.params.id, 10);
+    if (isNaN(attachmentId) || isNaN(requesterId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Invalid attachment ID or requester ID"],
+      });
+    }
+
+    const { removalReason } = req.body ?? {};
+    const trimmedReason = typeof removalReason === "string" ? removalReason.trim() : "";
+    if (!trimmedReason || trimmedReason.length < 3 || trimmedReason.length > 200) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["removalReason must be between 3 and 200 characters"],
+      });
+    }
+
+    const prisma = getPrisma();
+    const attachment = await prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { ticket: { select: { requesterId: true } } },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({
+        statusCode: 404,
+        error: "Not Found",
+        message: "Attachment not found",
+      });
+    }
+
+    if (attachment.ticket.requesterId !== requesterId) {
+      return res.status(403).json({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Access denied to attachment belonging to another requester",
+      });
+    }
+
+    const updated = await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: {
+        isRemoved: true,
+        removedAt: new Date(),
+        removalReason: trimmedReason,
+      },
+    });
+
+    return res.status(200).json(updated);
+  } catch {
+    return res.status(500).json({ error: "Failed to remove attachment" });
+  }
+});
+
 export default app;
