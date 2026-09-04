@@ -58,8 +58,12 @@ npx playwright test e2e/lab-02/
 ```
 
 ## 6. Final Results
-*(All planned test cases verified and passing in `lab2-staging` and `main` branches)*
+- [x] Backend API Tests: All 15+ test cases passed (`create-ticket`, `my-tickets`, `ticket-detail`, `requester-and-systems`).
+- [x] Frontend Component Tests: All 9 test cases passed (`App.test.tsx`, `MyTicketsList.test.tsx`, `RequesterTicketDetail.test.tsx`).
+- [x] Visual Inspection Checklist: Zen Green theme tokens `#006B3C`, `#0B7A46`, `#EAF6EF` verified across Desktop and Mobile cards.
+- [x] All 6 Acceptance Criteria (AC-01 to AC-06) satisfied and verified.
 
 ## 7. Known Limitations or Deferred Tests
 - Full session authentication and role authorization are deferred to Lab 3.
 - IT Staff ticket queue and workflow tests are deferred to later labs.
+
