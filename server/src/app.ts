@@ -194,4 +194,107 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Lab 2 — GET /api/tickets
+// Retrieve paginated list of tickets owned by the current Requester.
+// Supports search, category, priority, status filtering, sorting, and pagination.
+// ---------------------------------------------------------------------------
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  try {
+    const rawRequesterId = req.headers["x-requester-id"];
+    if (!rawRequesterId) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header is required"],
+      });
+    }
+
+    const requesterId = parseInt(String(rawRequesterId), 10);
+    if (isNaN(requesterId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header must be a valid number"],
+      });
+    }
+
+    const {
+      search,
+      category,
+      priority,
+      status,
+      page = "1",
+      limit = "10",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(String(limit), 10) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    const where: any = {
+      requesterId,
+    };
+
+    if (search && typeof search === "string" && search.trim().length > 0) {
+      const q = search.trim();
+      where.OR = [
+        { ticketNumber: { contains: q, mode: "insensitive" } },
+        { summary: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    if (category) {
+      const catId = parseInt(String(category), 10);
+      if (!isNaN(catId)) {
+        where.categoryId = catId;
+      }
+    }
+
+    if (priority && typeof priority === "string") {
+      where.requestedPriority = priority;
+    }
+
+    if (status && typeof status === "string") {
+      where.currentStatus = status;
+    }
+
+    const validSortFields = ["createdAt", "ticketNumber", "requestedPriority", "currentStatus"];
+    const sortField = validSortFields.includes(String(sortBy)) ? String(sortBy) : "createdAt";
+    const order = String(sortOrder).toLowerCase() === "asc" ? "asc" : "desc";
+
+    const prisma = getPrisma();
+
+    const [totalItems, tickets] = await Promise.all([
+      prisma.ticket.count({ where }),
+      prisma.ticket.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: { [sortField]: order },
+        include: {
+          category: { select: { id: true, name: true } },
+          relatedSystem: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / limitNum) || 1;
+
+    return res.status(200).json({
+      data: tickets,
+      pagination: {
+        totalItems,
+        currentPage: pageNum,
+        totalPages,
+        pageSize: limitNum,
+      },
+    });
+  } catch {
+    return res.status(500).json({ error: "Failed to retrieve tickets" });
+  }
+});
+
 export default app;
