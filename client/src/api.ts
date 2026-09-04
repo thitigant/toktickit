@@ -32,6 +32,29 @@ export interface Ticket {
   description: string;
   createdAt: string;
   updatedAt: string;
+  category?: { id: number; name: string };
+  relatedSystem?: { id: number; name: string };
+}
+
+export interface GetTicketsQueryParams {
+  search?: string;
+  category?: number | string;
+  priority?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export interface PaginatedTickets {
+  data: Ticket[];
+  pagination: {
+    totalItems: number;
+    currentPage: number;
+    totalPages: number;
+    pageSize: number;
+  };
 }
 
 export interface CreateTicketInput {
@@ -90,3 +113,33 @@ export async function createTicket(input: CreateTicketInput, requesterId: number
 
   return res.json();
 }
+
+export async function getTickets(
+  params: GetTicketsQueryParams,
+  requesterId: number
+): Promise<PaginatedTickets> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.category) query.set("category", String(params.category));
+  if (params.priority) query.set("priority", params.priority);
+  if (params.status) query.set("status", params.status);
+  if (params.page) query.set("page", String(params.page));
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.sortBy) query.set("sortBy", params.sortBy);
+  if (params.sortOrder) query.set("sortOrder", params.sortOrder);
+
+  const res = await fetch(`${API_URL}/api/tickets?${query.toString()}`, {
+    headers: {
+      "x-requester-id": String(requesterId),
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    const message = errorData.error || errorData.message || "Failed to retrieve tickets";
+    throw new Error(message);
+  }
+
+  return res.json();
+}
+

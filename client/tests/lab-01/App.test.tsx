@@ -4,6 +4,12 @@ import App from "../../src/App.js";
 import * as api from "../../src/api.js";
 
 describe("App", () => {
+  beforeEach(() => {
+    vi.spyOn(api, "getRequesters").mockResolvedValue([
+      { id: 1, name: "Jennifer Anderson", email: "j@example.com", department: "IT" },
+    ]);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -26,7 +32,8 @@ describe("App", () => {
     });
 
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: /check system/i }));
+    fireEvent.click(screen.getByRole("button", { name: /system status/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^check system$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Online/i)).toBeInTheDocument();
@@ -44,7 +51,8 @@ describe("App", () => {
     );
 
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: /check system/i }));
+    fireEvent.click(screen.getByRole("button", { name: /system status/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^check system$/i }));
 
     await waitFor(() => {
       const offlineElements = screen.getAllByText(/Offline/i);
