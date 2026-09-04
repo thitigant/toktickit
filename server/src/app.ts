@@ -70,4 +70,128 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Lab 2 — POST /api/tickets
+// Create a new IT support ticket. Requires x-requester-id header.
+// ---------------------------------------------------------------------------
+app.post("/api/tickets", async (req: Request, res: Response) => {
+  try {
+    const rawRequesterId = req.headers["x-requester-id"];
+    if (!rawRequesterId) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header is required"],
+      });
+    }
+
+    const requesterId = parseInt(String(rawRequesterId), 10);
+    if (isNaN(requesterId)) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["x-requester-id header must be a valid number"],
+      });
+    }
+
+    const { categoryId, relatedSystemId, requestedPriority, summary, description } = req.body ?? {};
+
+    const errors: string[] = [];
+
+    const trimmedSummary = typeof summary === "string" ? summary.trim() : "";
+    if (!trimmedSummary || trimmedSummary.length < 5 || trimmedSummary.length > 150) {
+      errors.push("summary must be between 5 and 150 characters");
+    }
+
+    const trimmedDesc = typeof description === "string" ? description.trim() : "";
+    if (!trimmedDesc || trimmedDesc.length < 10 || trimmedDesc.length > 2000) {
+      errors.push("description must be between 10 and 2000 characters");
+    }
+
+    const parsedCategory = parseInt(String(categoryId), 10);
+    if (isNaN(parsedCategory)) {
+      errors.push("categoryId is required and must be a number");
+    }
+
+    const parsedSystem = parseInt(String(relatedSystemId), 10);
+    if (isNaN(parsedSystem)) {
+      errors.push("relatedSystemId is required and must be a number");
+    }
+
+    const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+    const priority = requestedPriority ?? "MEDIUM";
+    if (!validPriorities.includes(priority)) {
+      errors.push("requestedPriority must be one of LOW, MEDIUM, HIGH, URGENT");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: errors,
+      });
+    }
+
+    const prisma = getPrisma();
+
+    // Verify requester exists and is active
+    const requester = await prisma.requesterUser.findUnique({
+      where: { id: requesterId },
+    });
+    if (!requester || !requester.isActive) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Requester not found or inactive"],
+      });
+    }
+
+    // Verify category exists
+    const category = await prisma.category.findUnique({
+      where: { id: parsedCategory },
+    });
+    if (!category) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Category not found"],
+      });
+    }
+
+    // Verify system exists
+    const system = await prisma.relatedSystem.findUnique({
+      where: { id: parsedSystem },
+    });
+    if (!system) {
+      return res.status(400).json({
+        statusCode: 400,
+        error: "Bad Request",
+        message: ["Related system not found"],
+      });
+    }
+
+    const year = new Date().getFullYear();
+    const count = await prisma.ticket.count();
+    const ticketNumber = `TKT-${year}-${String(count + 1).padStart(6, "0")}`;
+
+    const newTicket = await prisma.ticket.create({
+      data: {
+        ticketNumber,
+        requesterId,
+        categoryId: parsedCategory,
+        relatedSystemId: parsedSystem,
+        requestedPriority: priority,
+        itPriority: "MEDIUM",
+        currentStatus: "NEW",
+        summary: trimmedSummary,
+        description: trimmedDesc,
+      },
+    });
+
+    return res.status(201).json(newTicket);
+  } catch {
+    return res.status(500).json({ error: "Failed to create ticket" });
+  }
+});
+
 export default app;
