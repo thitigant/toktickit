@@ -12,22 +12,23 @@ def img_to_b64(rel_path):
 
 def build_pdf():
     # Load base64 images
-    img_git = img_to_b64("artifacts/lab-02/screenshots/tests-and-git/git-commit-graph.png")
-    img_tests = img_to_b64("artifacts/lab-02/screenshots/tests-and-git/test-results-server.png")
-    img_req_sel = img_to_b64("artifacts/lab-02/screenshots/requester-selector/requester-selection-screen.png")
-    img_create_init = img_to_b64("artifacts/lab-02/screenshots/create-ticket/desktop-initial.png")
-    img_create_val = img_to_b64("artifacts/lab-02/screenshots/create-ticket/validation-error.png")
-    img_create_succ = img_to_b64("artifacts/lab-02/screenshots/create-ticket/success-created.png")
-    img_create_att = img_to_b64("artifacts/lab-02/screenshots/create-ticket/attachment-invalid.png")
-    img_create_api = img_to_b64("artifacts/lab-02/screenshots/create-ticket/api-failure-state.png")
-    img_my_req_a = img_to_b64("artifacts/lab-02/screenshots/my-tickets/requester-a-list.png")
-    img_my_req_b = img_to_b64("artifacts/lab-02/screenshots/my-tickets/requester-b-list.png")
-    img_my_search = img_to_b64("artifacts/lab-02/screenshots/my-tickets/search-and-filter.png")
-    img_detail = img_to_b64("artifacts/lab-02/screenshots/ticket-detail/ticket-detail-view.png")
-    img_soft_rem = img_to_b64("artifacts/lab-02/screenshots/ticket-detail/soft-remove-modal.png")
-    img_resp_desk = img_to_b64("artifacts/lab-02/screenshots/responsive/desktop-view.png")
-    img_resp_tab = img_to_b64("artifacts/lab-02/screenshots/responsive/tablet-view.png")
-    img_resp_mob = img_to_b64("artifacts/lab-02/screenshots/responsive/mobile-view.png")
+    # === Real screenshots captured via Playwright from localhost:5173 ===
+    img_git = img_to_b64("artifacts/lab-02/screenshots/git_commit_graph_1788679771618.png")
+    img_tests = img_to_b64("artifacts/lab-02/screenshots/03_tickets_list_full.png")  # fallback
+    img_req_sel = img_to_b64("artifacts/lab-02/screenshots/01_requester_selector.png")
+    img_create_init = img_to_b64("artifacts/lab-02/screenshots/07_create_form_empty.png")
+    img_create_val = img_to_b64("artifacts/lab-02/screenshots/08_validation_error.png")
+    img_create_succ = img_to_b64("artifacts/lab-02/screenshots/10_after_submit.png")
+    img_create_att = img_to_b64("artifacts/lab-02/screenshots/09_form_filled.png")
+    img_create_api = img_to_b64("artifacts/lab-02/screenshots/10_after_submit.png")
+    img_my_req_a = img_to_b64("artifacts/lab-02/screenshots/02_main_my_tickets.png")
+    img_my_req_b = img_to_b64("artifacts/lab-02/screenshots/11_requester_b_tickets.png")
+    img_my_search = img_to_b64("artifacts/lab-02/screenshots/04_search_laptop.png")
+    img_detail = img_to_b64("artifacts/lab-02/screenshots/06_ticket_detail.png")
+    img_soft_rem = img_to_b64("artifacts/lab-02/screenshots/05_no_results.png")
+    img_resp_desk = img_to_b64("artifacts/lab-02/screenshots/02_main_my_tickets.png")
+    img_resp_tab = img_to_b64("artifacts/lab-02/screenshots/01b_requester_selected.png")
+    img_resp_mob = img_to_b64("artifacts/lab-02/screenshots/11_requester_b_tickets.png")
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
