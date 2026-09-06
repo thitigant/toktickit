@@ -1,18 +1,35 @@
-```markdown
-# TokTickIT - Full-Stack Hello World Starter (Lab 1)
+# TokTickIT — Requester Ticketing MVP with UI Foundation (Lab 2)
 
-TokTickIT is an IT service desk application built with React, TypeScript, Express, Prisma, and PostgreSQL.
+TokTickIT is an IT service desk web application built with React, TypeScript, Express, Prisma, PostgreSQL, and Zen Green design system.
 
 ## Repository Structure
 
 ```
 toktickit/
-├── client/          # React + TypeScript + Vite frontend
-├── server/          # Express + TypeScript + Prisma backend
-├── docs/            # Documentation & lab evidence
-│   └── lab-01/
+├── client/                      # React + TypeScript + Vite frontend
+│   ├── src/
+│   │   ├── components/          # CreateTicketForm, MyTicketsList, RequesterTicketDetail
+│   │   ├── api.ts               # REST API client
+│   │   └── App.tsx              # App Shell & Requester Context Selector
+│   └── tests/
+│       ├── lab-01/
+│       └── lab-02/              # MyTicketsList, RequesterTicketDetail, CreateTicket, AttachmentSection tests
+├── server/                      # Express + TypeScript + Prisma backend
+│   ├── prisma/                  # Schema, migrations, seed script
+│   ├── src/                     # Express app routes & controllers
+│   └── tests/
+│       ├── lab-01/
+│       └── lab-02/              # API & unit tests (tickets, my-tickets, ticket-detail, attachments)
+├── docs/                        # Engineering contract & lab specifications
+│   ├── lab-01/
+│   └── lab-02/                  # specification.md, tests.md, ui-spec.md, api-spec.md, reviewer.md, ai-use.md
+├── e2e/
+│   └── lab-02/                  # requester-ticket-flow.spec.ts
+├── artifacts/
+│   └── lab-02/screenshots/      # create-ticket, my-tickets, ticket-detail screenshots
 ├── .gitignore
 └── README.md
+```
 
 ## Setup Instructions
 
@@ -63,13 +80,15 @@ toktickit/
    Frontend runs at `http://localhost:5173`.
 
 ### 3. Running Automated Tests
-- **Backend Tests (Supertest):**
+- **Backend API & Unit Tests (Vitest + Supertest):**
   ```bash
   cd server && npm test
   ```
-- **Frontend Tests (Vitest + React Testing Library):**
+- **Frontend Component Tests (Vitest + React Testing Library):**
   ```bash
   cd client && npm test
   ```
-
-```
+- **End-to-End Tests (Playwright):**
+  ```bash
+  npx playwright test e2e/lab-02/
+  ```

@@ -1,16 +1,19 @@
 import { useState, useEffect } from "react";
-import { checkSystem, getRequesters, Category, RequesterUser } from "./api.js";
-import { CreateTicketForm } from "./components/CreateTicketForm.js";
-import { MyTicketsList } from "./components/MyTicketsList.js";
-import { RequesterTicketDetail } from "./components/RequesterTicketDetail.js";
+import { checkSystem, getRequesters, Category, RequesterUser } from "./api";
+import { CreateTicketForm } from "./components/CreateTicketForm";
+import { MyTicketsList } from "./components/MyTicketsList";
+import { RequesterTicketDetail } from "./components/RequesterTicketDetail";
 
 type ActiveTab = "my-tickets" | "create-ticket" | "check-system";
+type AppScreen = "select-requester" | "main";
 
 export default function App() {
+  const [screen, setScreen] = useState<AppScreen>("select-requester");
   const [tab, setTab] = useState<ActiveTab>("my-tickets");
   const [categories, setCategories] = useState<Category[]>([]);
   const [requesters, setRequesters] = useState<RequesterUser[]>([]);
   const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(null);
+  const [pendingRequesterId, setPendingRequesterId] = useState<number | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
 
   // System check state
@@ -19,20 +22,23 @@ export default function App() {
   const [checkError, setCheckError] = useState<string>("");
 
   useEffect(() => {
-    // Load categories & requesters on mount
     async function init() {
       try {
-        const [reqList, sysStatus] = await Promise.all([
-          getRequesters(),
-          checkSystem(),
-        ]);
+        const reqList = await getRequesters();
         setRequesters(reqList);
-        setCategories(sysStatus.categories);
-        if (reqList.length > 0 && selectedRequesterId === null) {
+        if (reqList.length > 0) {
+          setPendingRequesterId(reqList[0].id);
           setSelectedRequesterId(reqList[0].id);
         }
       } catch (err) {
-        console.error("Initialization error:", err);
+        console.error("Error fetching requesters:", err);
+      }
+
+      try {
+        const sysStatus = await checkSystem();
+        setCategories(sysStatus.categories);
+      } catch (err) {
+        console.warn("System check skipped during init:", err);
       }
     }
     init();
@@ -53,7 +59,8 @@ export default function App() {
 
   const handleRequesterChange = (newId: number) => {
     setSelectedRequesterId(newId);
-    setSelectedTicketId(null); // Clear active ticket selection on requester switch
+    setPendingRequesterId(newId);
+    setSelectedTicketId(null);
   };
 
   const handleSelectTab = (newTab: ActiveTab) => {
@@ -63,8 +70,216 @@ export default function App() {
     }
   };
 
+  const handleContinue = () => {
+    if (pendingRequesterId !== null) {
+      setSelectedRequesterId(pendingRequesterId);
+      setScreen("main");
+    }
+  };
+
+  const handleCancel = () => {
+    if (requesters.length > 0) {
+      setPendingRequesterId(requesters[0].id);
+    }
+  };
+
   const selectedRequester = requesters.find((r) => r.id === selectedRequesterId);
 
+  // ─── SCREEN: Select Development Requester ───────────────────────────────────
+  if (screen === "select-requester") {
+    return (
+      <div className="min-vh-100 d-flex flex-column" style={{ backgroundColor: "#F5F7F6" }}>
+        {/* Header */}
+        <header
+          className="navbar navbar-dark px-4 py-2 shadow-sm"
+          style={{ backgroundColor: "#006B3C" }}
+        >
+          <div className="container-fluid d-flex align-items-center justify-content-between">
+            {/* Brand */}
+            <div className="d-flex align-items-center gap-2">
+              <div
+                className="d-flex align-items-center justify-content-center rounded-circle"
+                style={{
+                  width: 36,
+                  height: 36,
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                }}
+              >
+                <span style={{ fontSize: 18 }}>⏱</span>
+              </div>
+              <span className="navbar-brand mb-0 fw-bold fs-5">
+                TokTickIT
+              </span>
+            </div>
+
+            {/* Nav links */}
+            <div className="btn-group my-1">
+              <button
+                id="nav-my-tickets-btn"
+                className={`btn btn-sm ${tab === "my-tickets" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
+                onClick={() => { handleSelectTab("my-tickets"); setScreen("main"); }}
+              >
+                📋 My Tickets
+              </button>
+              <button
+                id="nav-create-ticket-btn"
+                className={`btn btn-sm ${tab === "create-ticket" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
+                onClick={() => { handleSelectTab("create-ticket"); setScreen("main"); }}
+              >
+                ➕ Create Ticket
+              </button>
+              <button
+                id="nav-check-system-btn"
+                className={`btn btn-sm ${tab === "check-system" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
+                onClick={() => { handleSelectTab("check-system"); setScreen("main"); }}
+              >
+                ⚙️ System Status
+              </button>
+            </div>
+
+            {/* Profile placeholder (neutral before selection) */}
+            <div className="d-flex align-items-center gap-2 text-white-50 small">
+              <div
+                className="d-flex align-items-center justify-content-center rounded-circle"
+                style={{
+                  width: 28,
+                  height: 28,
+                  backgroundColor: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                }}
+              >
+                👤
+              </div>
+              <span className="text-light fw-medium">Profile ▾</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Breadcrumb */}
+        <div className="border-bottom bg-white px-4 py-2">
+          <nav aria-label="breadcrumb">
+            <ol className="breadcrumb mb-0 small">
+              <li className="breadcrumb-item">
+                <span style={{ color: "#006B3C" }}>🏠</span>
+              </li>
+              <li className="breadcrumb-item active text-muted" aria-current="page">
+                Development Requester Selection
+              </li>
+            </ol>
+          </nav>
+        </div>
+
+        {/* Main content – centered card */}
+        <main className="flex-grow-1 d-flex align-items-start justify-content-center py-5 px-3">
+          <div
+            className="card border shadow-sm rounded-3 p-4"
+            style={{ width: "100%", maxWidth: 500, backgroundColor: "#fff", marginTop: "2rem" }}
+          >
+            {/* Icon */}
+            <div className="text-center mb-3">
+              <div
+                className="d-inline-flex align-items-center justify-content-center rounded-circle"
+                style={{ width: 64, height: 64, backgroundColor: "#E8F5EE", border: "2px solid #C8E6D6" }}
+              >
+                <span style={{ fontSize: 30 }}>👥</span>
+              </div>
+            </div>
+
+            {/* Title & Subtitle */}
+            <h1 className="h5 fw-bold text-center mb-1" style={{ color: "#1a1a1a" }}>
+              Select Development Requester
+            </h1>
+            <p className="text-center text-muted small mb-4">
+              Choose a development requester to simulate the current requester context for Lab 2.<br />
+              This is for testing only and is not a login screen.
+            </p>
+
+            <hr className="my-3" />
+
+            {/* Dropdown */}
+            <div className="mb-3">
+              <label
+                htmlFor="dev-requester-select"
+                className="form-label small fw-semibold"
+                style={{ color: "#1a1a1a" }}
+              >
+                Development Requester <span className="text-danger">*</span>
+              </label>
+              <select
+                id="dev-requester-select"
+                className="form-select"
+                value={pendingRequesterId ?? ""}
+                onChange={(e) => setPendingRequesterId(Number(e.target.value))}
+              >
+                {requesters.length === 0 && (
+                  <option value="">Loading requesters…</option>
+                )}
+                {requesters.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} {r.department ? `(${r.department})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Info alert */}
+            <div
+              className="d-flex align-items-center gap-2 rounded px-3 py-2 mb-4 small"
+              style={{ backgroundColor: "#EAF6EE", border: "1px solid #A8D5B5", color: "#006B3C" }}
+            >
+              <span>ℹ️</span>
+              <span>Only active development requesters are shown.</span>
+            </div>
+
+            {/* Auth notice */}
+            <div
+              className="d-flex align-items-start gap-3 rounded px-3 py-3 mb-4"
+              style={{ backgroundColor: "#FAFAFA", border: "1px solid #E0E0E0" }}
+            >
+              <div
+                className="d-flex align-items-center justify-content-center flex-shrink-0 rounded-circle"
+                style={{ width: 36, height: 36, backgroundColor: "#E8F0FE", border: "1px solid #C5D5F5" }}
+              >
+                🛡️
+              </div>
+              <div>
+                <p className="mb-1 fw-semibold small" style={{ color: "#1a1a1a" }}>
+                  Authentication coming in Lab 3
+                </p>
+                <p className="mb-0 text-muted" style={{ fontSize: "0.8rem" }}>
+                  In Lab 3, this selection will be replaced with secure authentication
+                  so you can access the system with your own account.
+                </p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="d-flex justify-content-end gap-2">
+              <button
+                id="requester-cancel-btn"
+                className="btn btn-outline-secondary"
+                onClick={handleCancel}
+              >
+                Cancel
+              </button>
+              <button
+                id="requester-continue-btn"
+                className="btn fw-semibold text-white d-flex align-items-center gap-1"
+                style={{ backgroundColor: "#006B3C", border: "none", padding: "8px 20px" }}
+                onClick={handleContinue}
+                disabled={pendingRequesterId === null || requesters.length === 0}
+              >
+                Continue →
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ─── SCREEN: Main App ────────────────────────────────────────────────────────
   return (
     <div className="min-vh-100 d-flex flex-column" style={{ backgroundColor: "#F5F7F6" }}>
       {/* Zen Green Navigation Header */}
@@ -72,9 +287,14 @@ export default function App() {
         <div className="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-2">
           {/* Identity */}
           <div className="d-flex align-items-center gap-2">
-            <span className="fs-4">🎫</span>
-            <span className="navbar-brand mb-0 h1 fw-bold tracking-tight">
-              TokTickIT <span className="fw-normal fs-6 text-light opacity-75">IT Service Desk</span>
+            <div
+              className="d-flex align-items-center justify-content-center rounded-circle"
+              style={{ width: 36, height: 36, backgroundColor: "rgba(255,255,255,0.15)", border: "2px solid rgba(255,255,255,0.3)" }}
+            >
+              <span style={{ fontSize: 18 }}>⏱</span>
+            </div>
+            <span className="navbar-brand mb-0 fw-bold fs-5">
+              TokTickIT
             </span>
           </div>
 
@@ -82,55 +302,46 @@ export default function App() {
           <div className="btn-group my-1">
             <button
               id="nav-my-tickets-btn"
-              className={`btn btn-sm ${
-                tab === "my-tickets"
-                  ? "btn-light text-success fw-bold shadow-sm"
-                  : "btn-outline-light"
-              }`}
+              className={`btn btn-sm ${tab === "my-tickets" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
               onClick={() => handleSelectTab("my-tickets")}
             >
               📋 My Tickets
             </button>
             <button
               id="nav-create-ticket-btn"
-              className={`btn btn-sm ${
-                tab === "create-ticket"
-                  ? "btn-light text-success fw-bold shadow-sm"
-                  : "btn-outline-light"
-              }`}
+              className={`btn btn-sm ${tab === "create-ticket" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
               onClick={() => handleSelectTab("create-ticket")}
             >
               ➕ Create Ticket
             </button>
             <button
               id="nav-check-system-btn"
-              className={`btn btn-sm ${
-                tab === "check-system"
-                  ? "btn-light text-success fw-bold shadow-sm"
-                  : "btn-outline-light"
-              }`}
+              className={`btn btn-sm ${tab === "check-system" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
               onClick={() => handleSelectTab("check-system")}
             >
               ⚙️ System Status
             </button>
           </div>
 
-          {/* Development Requester Selector Context */}
-          <div className="d-flex align-items-center gap-2 bg-black bg-opacity-25 px-3 py-1 rounded border border-light border-opacity-25">
-            <span className="text-light small fw-bold">👤 Requester:</span>
-            <select
-              id="app-requester-selector"
-              className="form-select form-select-sm bg-light text-dark fw-bold border-0"
-              style={{ minWidth: 180, cursor: "pointer" }}
-              value={selectedRequesterId ?? ""}
-              onChange={(e) => handleRequesterChange(Number(e.target.value))}
+          {/* Profile Badge (bound to selectedRequester.name) */}
+          <div
+            className="d-flex align-items-center gap-2 text-white small"
+            style={{ cursor: "pointer" }}
+            onClick={() => setScreen("select-requester")}
+            title="Click to switch requester identity"
+          >
+            <div
+              className="d-flex align-items-center justify-content-center rounded-circle"
+              style={{
+                width: 30,
+                height: 30,
+                backgroundColor: "rgba(255,255,255,0.15)",
+                border: "1px solid rgba(255,255,255,0.3)",
+              }}
             >
-              {requesters.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.department})
-                </option>
-              ))}
-            </select>
+              👤
+            </div>
+            <span className="fw-medium">{selectedRequester ? `${selectedRequester.name} ▾` : "Profile ▾"}</span>
           </div>
         </div>
       </header>
@@ -140,11 +351,27 @@ export default function App() {
         {/* Requester Context Info Banner */}
         {selectedRequester && (
           <div
-            className="alert alert-success d-flex justify-content-between align-items-center py-2 px-3 mb-4 rounded shadow-sm"
+            className="alert alert-success d-flex flex-wrap justify-content-between align-items-center py-2 px-3 mb-4 rounded shadow-sm"
             style={{ backgroundColor: "#EAF6EF", borderColor: "#0B7A46", color: "#006B3C" }}
           >
-            <div className="small">
-              <strong>Testing Context:</strong> Logged in as <strong>{selectedRequester.name}</strong> ({selectedRequester.email} &bull; {selectedRequester.department})
+            <div className="small d-flex align-items-center gap-2 flex-wrap">
+              <span><strong>Testing Context:</strong> Logged in as <strong>{selectedRequester.name}</strong> ({selectedRequester.email} &bull; {selectedRequester.department})</span>
+              <div className="d-inline-flex align-items-center gap-1 ms-2">
+                <span className="text-muted small">Switch:</span>
+                <select
+                  id="app-requester-selector"
+                  className="form-select form-select-sm py-0 px-2 text-dark fw-semibold border-success"
+                  style={{ width: "auto", fontSize: "0.82rem", cursor: "pointer" }}
+                  value={selectedRequesterId ?? ""}
+                  onChange={(e) => handleRequesterChange(Number(e.target.value))}
+                >
+                  {requesters.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.department})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <span className="badge bg-success bg-opacity-75 text-white">Dev Requester Mode</span>
           </div>

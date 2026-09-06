@@ -223,7 +223,10 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       search,
       category,
       priority,
+      itPriority,
       status,
+      all,
+      viewAll,
       page = "1",
       limit = "10",
       sortBy = "createdAt",
@@ -234,9 +237,10 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     const limitNum = Math.min(50, Math.max(1, parseInt(String(limit), 10) || 10));
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = {
-      requesterId,
-    };
+    const where: any = {};
+    if (all !== "true" && viewAll !== "true") {
+      where.requesterId = requesterId;
+    }
 
     if (search && typeof search === "string" && search.trim().length > 0) {
       const q = search.trim();
@@ -255,6 +259,10 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 
     if (priority && typeof priority === "string") {
       where.requestedPriority = priority;
+    }
+
+    if (itPriority && typeof itPriority === "string") {
+      where.itPriority = itPriority;
     }
 
     if (status && typeof status === "string") {
@@ -277,6 +285,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
         include: {
           category: { select: { id: true, name: true } },
           relatedSystem: { select: { id: true, name: true } },
+          requester: { select: { id: true, name: true, department: true } },
         },
       }),
     ]);

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { RequesterTicketDetail } from "../../src/components/RequesterTicketDetail.js";
-import * as api from "../../src/api.js";
+import { RequesterTicketDetail } from "../../src/components/RequesterTicketDetail";
+import * as api from "../../src/api";
 
-vi.mock("../../src/api.js", async (importOriginal) => {
+vi.mock("../../src/api", async (importOriginal) => {
   const actual = await importOriginal<typeof api>();
   return {
     ...actual,
@@ -59,8 +59,8 @@ describe("RequesterTicketDetail Component", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("TKT-2026-000101")).toBeDefined();
-      expect(screen.getByText("Screen flicker on laptop")).toBeDefined();
+      expect(screen.getByDisplayValue("TKT-2026-000101")).toBeDefined();
+      expect(screen.getByDisplayValue("Screen flicker on laptop")).toBeDefined();
       expect(screen.getByText("screenshot.png")).toBeDefined();
       expect(screen.getByRole("button", { name: /soft remove/i })).toBeDefined();
     });

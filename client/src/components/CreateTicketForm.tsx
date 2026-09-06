@@ -8,7 +8,7 @@ import {
   getRelatedSystems,
   checkSystem,
   createTicket,
-} from "../api.js";
+} from "../api";
 
 export function CreateTicketForm() {
   const [requesters, setRequesters] = useState<RequesterUser[]>([]);
