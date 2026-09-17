@@ -68,28 +68,52 @@ export interface CreateTicketInput {
   description: string;
 }
 
+export const DEFAULT_CATEGORIES: Category[] = [
+  { id: 1, name: "Account and Access", code: "ACCOUNT_ACCESS" },
+  { id: 2, name: "Hardware", code: "HARDWARE" },
+  { id: 3, name: "Software", code: "SOFTWARE" },
+  { id: 4, name: "Network", code: "NETWORK" },
+];
+
+export const DEFAULT_RELATED_SYSTEMS: RelatedSystem[] = [
+  { id: 1, name: "Email", code: "EMAIL" },
+  { id: 2, name: "Campus Wi-Fi", code: "WIFI" },
+  { id: 3, name: "VPN", code: "VPN" },
+  { id: 4, name: "LEB2 App", code: "LEB2" },
+  { id: 5, name: "Grade Submission App", code: "GRADE_SUB" },
+  { id: 6, name: "Printer", code: "PRINTER" },
+  { id: 7, name: "Corporate Laptop", code: "LAPTOP" },
+];
+
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
 }
 
 export async function checkSystem(): Promise<SystemStatus> {
-  const healthRes = await fetch(`${API_URL}/api/health`);
-  if (!healthRes.ok) throw new Error("Health check failed");
-
-  const catRes = await fetch(`${API_URL}/api/categories`);
-  if (!catRes.ok) throw new Error("Failed to fetch categories");
-
-  const categories: Category[] = await catRes.json();
-  return { online: true, categories };
+  try {
+    const healthRes = await fetch(`${API_URL}/api/health`).catch(() => null);
+    const catRes = await fetch(`${API_URL}/api/categories`).catch(() => null);
+    if (catRes && catRes.ok) {
+      const categories: Category[] = await catRes.json();
+      if (Array.isArray(categories) && categories.length > 0) {
+        return { online: true, categories };
+      }
+    }
+    return { online: !!(healthRes && healthRes.ok), categories: DEFAULT_CATEGORIES };
+  } catch (err) {
+    console.warn("Using default categories fallback:", err);
+    return { online: true, categories: DEFAULT_CATEGORIES };
+  }
 }
 
 export async function getRequesters(): Promise<RequesterUser[]> {
   try {
     const res = await fetch(`${API_URL}/api/requesters/active`);
-    if (!res.ok) throw new Error("Failed to fetch requesters");
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) return data;
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
   } catch (err) {
     console.warn("Using fallback requesters due to API fetch error:", err);
   }
@@ -106,9 +130,16 @@ export async function getRequesters(): Promise<RequesterUser[]> {
 }
 
 export async function getRelatedSystems(): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems`);
-  if (!res.ok) throw new Error("Failed to fetch related systems");
-  return res.json();
+  try {
+    const res = await fetch(`${API_URL}/api/related-systems`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    console.warn("Using fallback related systems:", err);
+  }
+  return DEFAULT_RELATED_SYSTEMS;
 }
 
 export async function createTicket(input: CreateTicketInput, requesterId: number): Promise<Ticket> {

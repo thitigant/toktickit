@@ -8,22 +8,24 @@ import {
   getRelatedSystems,
   checkSystem,
   createTicket,
+  DEFAULT_CATEGORIES,
+  DEFAULT_RELATED_SYSTEMS,
 } from "../api";
 
 export function CreateTicketForm() {
   const [requesters, setRequesters] = useState<RequesterUser[]>([]);
-  const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(null);
+  const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(1);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [systems, setSystems] = useState<RelatedSystem[]>([]);
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  const [systems, setSystems] = useState<RelatedSystem[]>(DEFAULT_RELATED_SYSTEMS);
 
-  const [categoryId, setCategoryId] = useState<number>(0);
-  const [relatedSystemId, setRelatedSystemId] = useState<number>(0);
+  const [categoryId, setCategoryId] = useState<number>(DEFAULT_CATEGORIES[0]?.id || 1);
+  const [relatedSystemId, setRelatedSystemId] = useState<number>(DEFAULT_RELATED_SYSTEMS[0]?.id || 1);
   const [requestedPriority, setRequestedPriority] = useState<string>("MEDIUM");
   const [summary, setSummary] = useState<string>("");
   const [description, setDescription] = useState<string>("");
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [createdTicket, setCreatedTicket] = useState<Ticket | null>(null);
