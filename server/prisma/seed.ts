@@ -1,7 +1,10 @@
-import { getPrisma } from "../src/prisma.js";
+import { PrismaClient, Role } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
 
 async function main() {
-  const prisma = getPrisma();
+  console.log("Starting Lab 3 seed...");
 
   // --- Seed Categories ---
   const categories = [
@@ -40,634 +43,209 @@ async function main() {
   }
   console.log("Seeded 7 related systems.");
 
-  // --- Seed Requester Users ---
-  const requesters = [
-    { name: "Thitigant Surayothin", email: "thitigant.surayothin@example.com", department: "IT Support", isActive: true },
-    { name: "Jennifer Anderson", email: "jennifer.anderson@example.com", department: "IT Support", isActive: true },
-    { name: "Michael Brown", email: "michael.brown@example.com", department: "Finance", isActive: true },
-    { name: "Sarah Johnson", email: "sarah.johnson@example.com", department: "Marketing", isActive: true },
-    { name: "David Lee", email: "david.lee@example.com", department: "Engineering", isActive: true },
-    { name: "Gorn Proxie", email: "gorn.proxie@example.com", department: "Engineering", isActive: true },
-    { name: "Emily Chen", email: "emily.chen@example.com", department: "HR", isActive: true },
-    { name: "Tom Wilson", email: "tom.wilson@example.com", department: "Finance", isActive: true },
-    { name: "Inactive Test User", email: "inactive.user@example.com", department: "HR", isActive: false },
+  // --- Hash default passwords ---
+  const salt = await bcrypt.genSalt(10);
+  const defaultPasswordHash = await bcrypt.hash("Password123!", salt);
+  const initialPasswordHash = await bcrypt.hash("InitialPassword123!", salt);
+
+  // --- Seed Users (Requesters, IT Staff, Administrator) ---
+  const seedUsers = [
+    // Requesters (4 active, 1 inactive)
+    {
+      email: "requester.jennifer@toktickit.com",
+      name: "Jennifer Anderson",
+      role: Role.REQUESTER,
+      isActive: true,
+      mustChangePassword: false,
+      department: "Finance",
+      passwordHash: defaultPasswordHash,
+    },
+    {
+      email: "requester.michael@toktickit.com",
+      name: "Michael Brown",
+      role: Role.REQUESTER,
+      isActive: true,
+      mustChangePassword: false,
+      department: "Marketing",
+      passwordHash: defaultPasswordHash,
+    },
+    {
+      email: "requester.sarah@toktickit.com",
+      name: "Sarah Johnson",
+      role: Role.REQUESTER,
+      isActive: true,
+      mustChangePassword: false,
+      department: "Engineering",
+      passwordHash: defaultPasswordHash,
+    },
+    {
+      email: "requester.david@toktickit.com",
+      name: "David Lee",
+      role: Role.REQUESTER,
+      isActive: true,
+      mustChangePassword: true, // Needs password change on first login
+      department: "HR",
+      passwordHash: initialPasswordHash,
+    },
+    {
+      email: "requester.inactive@toktickit.com",
+      name: "Inactive Requester",
+      role: Role.REQUESTER,
+      isActive: false,
+      mustChangePassword: false,
+      department: "Operations",
+      passwordHash: defaultPasswordHash,
+    },
+
+    // IT Staff (3 active, 1 inactive)
+    {
+      email: "staff.alex@toktickit.com",
+      name: "Alex Thompson (IT Support)",
+      role: Role.IT_STAFF,
+      isActive: true,
+      mustChangePassword: false,
+      department: "IT Services",
+      passwordHash: defaultPasswordHash,
+    },
+    {
+      email: "staff.bob@toktickit.com",
+      name: "Bob Miller (IT Support)",
+      role: Role.IT_STAFF,
+      isActive: true,
+      mustChangePassword: false,
+      department: "IT Services",
+      passwordHash: defaultPasswordHash,
+    },
+    {
+      email: "staff.clara@toktickit.com",
+      name: "Clara Vance (IT Support)",
+      role: Role.IT_STAFF,
+      isActive: true,
+      mustChangePassword: true, // Needs password change on first login
+      department: "IT Services",
+      passwordHash: initialPasswordHash,
+    },
+    {
+      email: "staff.inactive@toktickit.com",
+      name: "Inactive Staff",
+      role: Role.IT_STAFF,
+      isActive: false,
+      mustChangePassword: false,
+      department: "IT Services",
+      passwordHash: defaultPasswordHash,
+    },
+
+    // Administrator (1 active)
+    {
+      email: "admin@toktickit.com",
+      name: "System Administrator",
+      role: Role.ADMINISTRATOR,
+      isActive: true,
+      mustChangePassword: false,
+      department: "IT Administration",
+      passwordHash: defaultPasswordHash,
+    },
   ];
 
-  for (const user of requesters) {
-    await prisma.requesterUser.upsert({
-      where: { email: user.email },
-      update: { name: user.name, department: user.department, isActive: user.isActive },
-      create: user,
+  for (const u of seedUsers) {
+    await prisma.user.upsert({
+      where: { email: u.email },
+      update: {
+        name: u.name,
+        role: u.role,
+        isActive: u.isActive,
+        mustChangePassword: u.mustChangePassword,
+        department: u.department,
+        passwordHash: u.passwordHash,
+      },
+      create: u,
     });
   }
-  console.log("Seeded 8 requester users (7 active, 1 inactive).");
+  console.log(`Seeded ${seedUsers.length} users across Requester, IT Staff, and Administrator roles.`);
 
-  // --- Seed Sample Tickets ---
-  // Look up IDs dynamically
-  const allCategories = await prisma.category.findMany();
-  const allSystems = await prisma.relatedSystem.findMany();
-  const allRequesters = await prisma.requesterUser.findMany({ where: { isActive: true } });
+  // --- Seed Sample Tickets with Ownership ---
+  const catHardware = await prisma.category.findUnique({ where: { code: "HARDWARE" } });
+  const catNetwork = await prisma.category.findUnique({ where: { code: "NETWORK" } });
+  const catSoftware = await prisma.category.findUnique({ where: { code: "SOFTWARE" } });
 
-  const catMap: Record<string, number> = {};
-  for (const c of allCategories) catMap[c.code] = c.id;
+  const sysLaptop = await prisma.relatedSystem.findUnique({ where: { code: "LAPTOP" } });
+  const sysVPN = await prisma.relatedSystem.findUnique({ where: { code: "VPN" } });
+  const sysEmail = await prisma.relatedSystem.findUnique({ where: { code: "EMAIL" } });
 
-  const sysMap: Record<string, number> = {};
-  for (const s of allSystems) sysMap[s.code] = s.id;
+  const reqJennifer = await prisma.user.findUnique({ where: { email: "requester.jennifer@toktickit.com" } });
+  const reqMichael = await prisma.user.findUnique({ where: { email: "requester.michael@toktickit.com" } });
+  const staffAlex = await prisma.user.findUnique({ where: { email: "staff.alex@toktickit.com" } });
+  const staffBob = await prisma.user.findUnique({ where: { email: "staff.bob@toktickit.com" } });
 
-  const reqMap: Record<string, number> = {};
-  for (const r of allRequesters) reqMap[r.email.split("@")[0].replace(".", "_")] = r.id;
+  if (catHardware && catNetwork && catSoftware && sysLaptop && sysVPN && sysEmail && reqJennifer && reqMichael) {
+    const sampleTickets = [
+      {
+        ticketNumber: "TKT-2026-000001",
+        summary: "Laptop battery drains in less than 1 hour",
+        description: "Dell Latitude laptop drains battery very rapidly even on idle mode.",
+        requestedPriority: "MEDIUM",
+        itPriority: "HIGH",
+        currentStatus: "IN_PROGRESS",
+        categoryId: catHardware.id,
+        relatedSystemId: sysLaptop.id,
+        requesterId: reqJennifer.id,
+        ownerId: staffAlex?.id,
+      },
+      {
+        ticketNumber: "TKT-2026-000002",
+        summary: "Cannot connect to VPN from home network",
+        description: "VPN client shows timeout error after entering 2FA code.",
+        requestedPriority: "HIGH",
+        itPriority: "HIGH",
+        currentStatus: "OPEN",
+        categoryId: catNetwork.id,
+        relatedSystemId: sysVPN.id,
+        requesterId: reqMichael.id,
+        ownerId: staffBob?.id,
+      },
+      {
+        ticketNumber: "TKT-2026-000003",
+        summary: "Outlook email search is returning no results",
+        description: "Indexing seems stuck at 0 items remaining.",
+        requestedPriority: "LOW",
+        itPriority: "LOW",
+        currentStatus: "NEW",
+        categoryId: catSoftware.id,
+        relatedSystemId: sysEmail.id,
+        requesterId: reqJennifer.id,
+        ownerId: null, // Unassigned for testing claim workflow
+      },
+    ];
 
-  // Helper to find requester id by partial name
-  const reqByName = (name: string) => allRequesters.find(r => r.name === name)!.id;
+    for (const t of sampleTickets) {
+      const existingTicket = await prisma.ticket.findUnique({ where: { ticketNumber: t.ticketNumber } });
+      if (!existingTicket) {
+        const createdTicket = await prisma.ticket.create({ data: t });
 
-  // Delete existing attachments and tickets so fresh sample data is created
-  await prisma.attachment.deleteMany();
-  await prisma.ticket.deleteMany();
-  console.log("Cleared existing tickets.");
+        // Add a sample public comment and internal note
+        if (staffAlex) {
+          await prisma.comment.create({
+            data: {
+              content: "Hello Jennifer, we have received your ticket and are looking into replacement batteries.",
+              ticketId: createdTicket.id,
+              authorId: staffAlex.id,
+            },
+          });
 
-  const sampleTickets = [
-    // --- Michael Brown tickets ---
-    {
-      ticketNumber: "TKT-2025-001234",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Laptop battery drains quickly",
-      description: "My laptop battery only lasts about 1 hour even with minimal usage. The device is a Dell Latitude 5520, purchased 2 years ago.",
-      createdAt: new Date("2025-05-12T09:14:00Z"),
-      updatedAt: new Date("2025-05-13T10:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001230",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["PRINTER"],
-      requestedPriority: "MEDIUM",
-      itPriority: "LOW",
-      currentStatus: "NEW",
-      summary: "Printer keeps showing offline",
-      description: "The shared office printer on 3rd floor keeps showing as offline despite being powered on and connected to the network.",
-      createdAt: new Date("2025-05-10T02:10:00Z"),
-      updatedAt: new Date("2025-05-10T10:15:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001227",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Docking station not detected",
-      description: "My USB-C docking station is not being detected when I connect my laptop. Tried different cables and ports.",
-      createdAt: new Date("2025-05-09T08:15:00Z"),
-      updatedAt: new Date("2025-05-09T14:50:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001220",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "HIGH",
-      itPriority: "HIGH",
-      currentStatus: "RESOLVED",
-      summary: "Excel crashes when opening large files",
-      description: "Microsoft Excel crashes consistently when trying to open spreadsheets larger than 50MB. Running Office 365 latest version.",
-      createdAt: new Date("2025-05-07T14:22:00Z"),
-      updatedAt: new Date("2025-05-08T09:00:00Z"),
-    },
-    // --- Sarah Johnson tickets ---
-    {
-      ticketNumber: "TKT-2025-001233",
-      requesterId: reqByName("Sarah Johnson"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["VPN"],
-      requestedPriority: "HIGH",
-      itPriority: "HIGH",
-      currentStatus: "NEW",
-      summary: "Cannot connect to VPN",
-      description: "Unable to connect to the corporate VPN from my home network. Error message: 'Connection timed out after 30 seconds'.",
-      createdAt: new Date("2025-05-12T08:02:00Z"),
-      updatedAt: new Date("2025-05-12T09:45:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001229",
-      requesterId: reqByName("Sarah Johnson"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["LEB2"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "IN_PROGRESS",
-      summary: "Request access to SharePoint",
-      description: "I need access to the Marketing Team SharePoint site for the Q3 campaign project materials.",
-      createdAt: new Date("2025-05-10T10:08:00Z"),
-      updatedAt: new Date("2025-05-10T10:08:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001222",
-      requesterId: reqByName("Sarah Johnson"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Outlook calendar sync issues",
-      description: "Calendar events from my phone are not syncing properly with Outlook desktop. Some meetings show duplicate entries.",
-      createdAt: new Date("2025-05-08T11:30:00Z"),
-      updatedAt: new Date("2025-05-09T16:20:00Z"),
-    },
-    // --- David Lee tickets ---
-    {
-      ticketNumber: "TKT-2025-001232",
-      requesterId: reqByName("David Lee"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["LEB2"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Email not syncing on mobile",
-      description: "Work email stopped syncing on my mobile device after the recent security policy update. Android 14.",
-      createdAt: new Date("2025-05-11T04:45:00Z"),
-      updatedAt: new Date("2025-05-12T15:20:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001228",
-      requesterId: reqByName("David Lee"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "HIGH",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Outlook freezing intermittently",
-      description: "Outlook application freezes for 10-15 seconds when switching between folders or opening attachments.",
-      createdAt: new Date("2025-05-09T03:22:00Z"),
-      updatedAt: new Date("2025-05-11T01:40:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001218",
-      requesterId: reqByName("David Lee"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["WIFI"],
-      requestedPriority: "URGENT",
-      itPriority: "HIGH",
-      currentStatus: "RESOLVED",
-      summary: "No internet in Building C",
-      description: "Entire Building C has no internet connectivity since this morning. Affects approximately 50 employees.",
-      createdAt: new Date("2025-05-06T07:00:00Z"),
-      updatedAt: new Date("2025-05-06T12:30:00Z"),
-    },
-    // --- Jennifer Anderson tickets ---
-    {
-      ticketNumber: "TKT-2025-001231",
-      requesterId: reqByName("Jennifer Anderson"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "New employee setup request",
-      description: "Please set up workstation and accounts for new hire starting on May 15th. Need email, VPN, and door access.",
-      createdAt: new Date("2025-05-11T11:30:00Z"),
-      updatedAt: new Date("2025-05-12T11:05:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001224",
-      requesterId: reqByName("Jennifer Anderson"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["VPN"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Password reset for VPN access",
-      description: "Need to reset VPN password for user account jennifer.anderson. Locked out after multiple failed attempts.",
-      createdAt: new Date("2025-05-08T09:15:00Z"),
-      updatedAt: new Date("2025-05-09T10:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001216",
-      requesterId: reqByName("Jennifer Anderson"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["PRINTER"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Request for additional monitor",
-      description: "Requesting a second monitor for my workstation to improve productivity. Current setup only has one 24-inch display.",
-      createdAt: new Date("2025-05-05T14:00:00Z"),
-      updatedAt: new Date("2025-05-07T11:30:00Z"),
-    },
-    // --- Gorn Proxie tickets ---
-    {
-      ticketNumber: "TKT-2025-001226",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["GRADE_SUB"],
-      requestedPriority: "HIGH",
-      itPriority: "HIGH",
-      currentStatus: "IN_PROGRESS",
-      summary: "Grade submission app error 500",
-      description: "The Grade Submission App returns HTTP 500 error when trying to submit final grades for CS101. Affects all sections.",
-      createdAt: new Date("2025-05-10T16:45:00Z"),
-      updatedAt: new Date("2025-05-11T09:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001223",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["WIFI"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Slow Wi-Fi in engineering lab",
-      description: "Campus Wi-Fi speed in Engineering Lab Room 305 is extremely slow. Download speeds under 2 Mbps during peak hours.",
-      createdAt: new Date("2025-05-08T13:20:00Z"),
-      updatedAt: new Date("2025-05-10T08:45:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001215",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["LEB2"],
-      requestedPriority: "MEDIUM",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "LEB2 App login issues",
-      description: "Cannot log into LEB2 App with my university credentials. Error: 'Authentication failed - account not found'.",
-      createdAt: new Date("2025-05-04T10:00:00Z"),
-      updatedAt: new Date("2025-05-05T14:30:00Z"),
-    },
-    // --- Emily Chen tickets ---
-    {
-      ticketNumber: "TKT-2025-001225",
-      requesterId: reqByName("Emily Chen"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "NEW",
-      summary: "Onboarding accounts for 5 new hires",
-      description: "Please create email, VPN, and system access accounts for 5 new employees joining the HR department on May 20th.",
-      createdAt: new Date("2025-05-09T08:00:00Z"),
-      updatedAt: new Date("2025-05-09T08:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001219",
-      requesterId: reqByName("Emily Chen"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Adobe Acrobat license renewal",
-      description: "My Adobe Acrobat Pro license has expired. Need renewal for creating and editing PDF forms for HR documents.",
-      createdAt: new Date("2025-05-07T11:00:00Z"),
-      updatedAt: new Date("2025-05-08T16:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001213",
-      requesterId: reqByName("Emily Chen"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["PRINTER"],
-      requestedPriority: "HIGH",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Conference room projector malfunction",
-      description: "The projector in Conference Room B is displaying a yellow tint on all presentations. HDMI connection seems fine.",
-      createdAt: new Date("2025-05-03T15:30:00Z"),
-      updatedAt: new Date("2025-05-04T09:15:00Z"),
-    },
-    // --- Tom Wilson tickets ---
-    {
-      ticketNumber: "TKT-2025-001221",
-      requesterId: reqByName("Tom Wilson"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "SAP login timeout issues",
-      description: "SAP system keeps timing out after 5 minutes of inactivity. The timeout should be at least 30 minutes per company policy.",
-      createdAt: new Date("2025-05-07T16:00:00Z"),
-      updatedAt: new Date("2025-05-08T10:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001217",
-      requesterId: reqByName("Tom Wilson"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["VPN"],
-      requestedPriority: "HIGH",
-      itPriority: "HIGH",
-      currentStatus: "NEW",
-      summary: "VPN disconnects every 10 minutes",
-      description: "VPN connection drops every 10-15 minutes when working from home. Have to reconnect manually each time. Very disruptive.",
-      createdAt: new Date("2025-05-06T09:30:00Z"),
-      updatedAt: new Date("2025-05-06T09:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001214",
-      requesterId: reqByName("Tom Wilson"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Keyboard keys sticking on laptop",
-      description: "Several keys on my laptop keyboard are sticking and not registering properly. Particularly the spacebar and enter key.",
-      createdAt: new Date("2025-05-04T08:45:00Z"),
-      updatedAt: new Date("2025-05-05T17:00:00Z"),
-    },
-
-    // --- Extra tickets to reach 42+ ---
-    {
-      ticketNumber: "TKT-2025-001212",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "URGENT",
-      itPriority: "URGENT",
-      currentStatus: "RESOLVED",
-      summary: "Laptop screen cracked after fall",
-      description: "My laptop screen cracked after accidentally falling from my desk. Cannot use the device at all.",
-      createdAt: new Date("2025-05-02T09:00:00Z"),
-      updatedAt: new Date("2025-05-03T14:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001211",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Update email distribution list",
-      description: "Please add the following 3 members to the Finance-Team distribution list in Outlook.",
-      createdAt: new Date("2025-05-01T13:00:00Z"),
-      updatedAt: new Date("2025-05-02T10:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001210",
-      requesterId: reqByName("Sarah Johnson"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Laptop fan making loud noise",
-      description: "Laptop fan runs at full speed constantly and makes a loud grinding noise. Started after last Windows update.",
-      createdAt: new Date("2025-04-30T10:30:00Z"),
-      updatedAt: new Date("2025-05-01T09:15:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001209",
-      requesterId: reqByName("David Lee"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["GRADE_SUB"],
-      requestedPriority: "HIGH",
-      itPriority: "HIGH",
-      currentStatus: "NEW",
-      summary: "VS Code extensions not installing",
-      description: "Unable to install any extensions in VS Code. Error: 'unable to connect to extensions marketplace'.",
-      createdAt: new Date("2025-04-29T14:20:00Z"),
-      updatedAt: new Date("2025-04-29T14:20:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001208",
-      requesterId: reqByName("Jennifer Anderson"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["WIFI"],
-      requestedPriority: "MEDIUM",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Guest Wi-Fi not working for visitors",
-      description: "Visitors to our office are unable to connect to the Guest Wi-Fi network. They receive 'authentication failed' error.",
-      createdAt: new Date("2025-04-28T11:00:00Z"),
-      updatedAt: new Date("2025-04-29T16:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001207",
-      requesterId: reqByName("Emily Chen"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Slack notifications not working",
-      description: "Desktop notifications for Slack have stopped working. I'm missing important messages from the team.",
-      createdAt: new Date("2025-04-27T09:15:00Z"),
-      updatedAt: new Date("2025-04-28T11:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001206",
-      requesterId: reqByName("Tom Wilson"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["LEB2"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "IN_PROGRESS",
-      summary: "Cannot access financial reports portal",
-      description: "I'm unable to access the quarterly financial reports portal. Getting 'Permission Denied' error.",
-      createdAt: new Date("2025-04-26T08:00:00Z"),
-      updatedAt: new Date("2025-04-27T14:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001205",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Docker Desktop not starting",
-      description: "Docker Desktop fails to start on my Windows laptop. Error: 'WSL 2 installation is incomplete'. Need for development work.",
-      createdAt: new Date("2025-04-25T15:00:00Z"),
-      updatedAt: new Date("2025-04-26T09:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001204",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["WIFI"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Slow file transfer to network drive",
-      description: "Transferring files to the shared network drive F:\\ is extremely slow. Only getting 2-3 MB/s on a wired connection.",
-      createdAt: new Date("2025-04-24T10:45:00Z"),
-      updatedAt: new Date("2025-04-25T16:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001203",
-      requesterId: reqByName("Sarah Johnson"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "HIGH",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Shared mailbox access needed",
-      description: "Need access to the marketing-events@company.com shared mailbox for managing event RSVPs.",
-      createdAt: new Date("2025-04-23T09:00:00Z"),
-      updatedAt: new Date("2025-04-24T11:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001202",
-      requesterId: reqByName("David Lee"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Webcam not detected in Teams",
-      description: "Built-in webcam is not detected by Microsoft Teams or any other application. Works in Device Manager but shows as disabled.",
-      createdAt: new Date("2025-04-22T13:30:00Z"),
-      updatedAt: new Date("2025-04-23T15:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001201",
-      requesterId: reqByName("Jennifer Anderson"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Windows Update stuck at 45%",
-      description: "Windows Update has been stuck at 45% for over 3 hours. Cannot restart the machine as it warns about potential data loss.",
-      createdAt: new Date("2025-04-21T07:30:00Z"),
-      updatedAt: new Date("2025-04-22T10:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001200",
-      requesterId: reqByName("Emily Chen"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["VPN"],
-      requestedPriority: "HIGH",
-      itPriority: "HIGH",
-      currentStatus: "IN_PROGRESS",
-      summary: "VPN blocks access to HR portal",
-      description: "When connected to VPN, I cannot access the internal HR portal at hr.company.com. Works fine without VPN.",
-      createdAt: new Date("2025-04-20T08:00:00Z"),
-      updatedAt: new Date("2025-04-21T09:45:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001199",
-      requesterId: reqByName("Tom Wilson"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Zoom audio echo during calls",
-      description: "Other participants hear an echo when I speak during Zoom calls. Issue persists with both built-in mic and headset.",
-      createdAt: new Date("2025-04-19T14:00:00Z"),
-      updatedAt: new Date("2025-04-20T11:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001198",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["GRADE_SUB"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Need admin access to test server",
-      description: "Require administrator access to the test-server-01 for deploying and testing the new grading module.",
-      createdAt: new Date("2025-04-18T10:00:00Z"),
-      updatedAt: new Date("2025-04-19T14:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001197",
-      requesterId: reqByName("Michael Brown"),
-      categoryId: catMap["SOFTWARE"],
-      relatedSystemId: sysMap["EMAIL"],
-      requestedPriority: "HIGH",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Outlook not sending emails with attachments",
-      description: "Emails with attachments larger than 10MB are stuck in the Outbox. Smaller emails send fine. Quota is supposed to be 25MB.",
-      createdAt: new Date("2025-04-17T11:30:00Z"),
-      updatedAt: new Date("2025-04-18T09:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001196",
-      requesterId: reqByName("Sarah Johnson"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["PRINTER"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Scanner producing blurry images",
-      description: "The flatbed scanner on the MFP in Room 204 produces blurry scanned documents. Glass has been cleaned.",
-      createdAt: new Date("2025-04-16T09:00:00Z"),
-      updatedAt: new Date("2025-04-17T16:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001195",
-      requesterId: reqByName("David Lee"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["VPN"],
-      requestedPriority: "URGENT",
-      itPriority: "URGENT",
-      currentStatus: "RESOLVED",
-      summary: "Account locked - urgent project deadline",
-      description: "My account is locked and I have a critical project deadline in 2 hours. Need immediate password reset and unlock.",
-      createdAt: new Date("2025-04-15T06:00:00Z"),
-      updatedAt: new Date("2025-04-15T06:45:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001194",
-      requesterId: reqByName("Gorn Proxie"),
-      categoryId: catMap["NETWORK"],
-      relatedSystemId: sysMap["WIFI"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Cannot connect to lab equipment via SSH",
-      description: "SSH connections to the Raspberry Pi clusters in the IoT lab (192.168.5.x subnet) are being blocked.",
-      createdAt: new Date("2025-04-14T13:00:00Z"),
-      updatedAt: new Date("2025-04-15T10:30:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001193",
-      requesterId: reqByName("Emily Chen"),
-      categoryId: catMap["ACCOUNT_ACCESS"],
-      relatedSystemId: sysMap["LEB2"],
-      requestedPriority: "LOW",
-      itPriority: "LOW",
-      currentStatus: "RESOLVED",
-      summary: "Remove access for departed employee",
-      description: "Please revoke all system access for John Smith (john.smith@company.com) who left the company last Friday.",
-      createdAt: new Date("2025-04-13T08:30:00Z"),
-      updatedAt: new Date("2025-04-14T09:00:00Z"),
-    },
-    {
-      ticketNumber: "TKT-2025-001192",
-      requesterId: reqByName("Tom Wilson"),
-      categoryId: catMap["HARDWARE"],
-      relatedSystemId: sysMap["LAPTOP"],
-      requestedPriority: "MEDIUM",
-      itPriority: "MEDIUM",
-      currentStatus: "RESOLVED",
-      summary: "Laptop overheating during video calls",
-      description: "My laptop gets extremely hot during extended video calls. The bottom of the device becomes too hot to touch.",
-      createdAt: new Date("2025-04-12T15:00:00Z"),
-      updatedAt: new Date("2025-04-14T11:00:00Z"),
-    },
-  ];
-
-  let created = 0;
-  for (const ticket of sampleTickets) {
-    try {
-      await prisma.ticket.create({ data: ticket });
-      created++;
-    } catch (e: any) {
-      // Skip if ticketNumber already exists (unique constraint)
-      if (e?.code === "P2002") continue;
-      throw e;
+          await prisma.internalNote.create({
+            data: {
+              content: "Checked battery cycle count via Dell diagnostics: 820 cycles. Qualifies for warranty replacement.",
+              ticketId: createdTicket.id,
+              authorId: staffAlex.id,
+            },
+          });
+        }
+      }
     }
+    console.log("Seeded sample tickets with public comments and internal notes.");
   }
-  console.log(`Seeded ${created} sample tickets across ${allRequesters.length} active requesters.`);
+
+  console.log("Lab 3 seed complete!");
 }
 
 main()
@@ -676,5 +254,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await getPrisma().$disconnect();
+    await prisma.$disconnect();
   });
