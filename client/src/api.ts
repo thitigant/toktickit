@@ -459,4 +459,57 @@ export async function removeAttachment(
   return res.json();
 }
 
+export interface StaffQueueParams {
+  search?: string;
+  status?: string;
+  requestedPriority?: string;
+  itPriority?: string;
+  categoryId?: number | string;
+  ownerId?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export async function fetchStaffTicketQueue(params: StaffQueueParams, token?: string): Promise<PaginatedTickets> {
+  const query = new URLSearchParams();
+  if (params.search) query.append("search", params.search);
+  if (params.status) query.append("status", params.status);
+  if (params.requestedPriority) query.append("requestedPriority", params.requestedPriority);
+  if (params.itPriority) query.append("itPriority", params.itPriority);
+  if (params.categoryId) query.append("categoryId", String(params.categoryId));
+  if (params.ownerId) query.append("ownerId", params.ownerId);
+  if (params.page) query.append("page", String(params.page));
+  if (params.limit) query.append("limit", String(params.limit));
+  if (params.sortBy) query.append("sortBy", params.sortBy);
+  if (params.sortOrder) query.append("sortOrder", params.sortOrder);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(`${API_URL}/api/staff/tickets?${query.toString()}`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || errData.message || "Failed to fetch IT Staff ticket queue");
+  }
+
+  const json = await res.json();
+  return {
+    data: json.data,
+    pagination: {
+      totalItems: json.pagination.total,
+      currentPage: json.pagination.page,
+      totalPages: json.pagination.totalPages,
+      pageSize: json.pagination.limit,
+    },
+  };
+}
+
+
 
