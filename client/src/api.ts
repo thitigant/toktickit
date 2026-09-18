@@ -17,12 +17,14 @@ export interface RequesterUser {
   name: string;
   email: string;
   department: string;
+  isActive?: boolean;
 }
 
 export interface Ticket {
   id: number;
   ticketNumber: string;
   requesterId: number;
+  ownerId?: number | null;
   categoryId: number;
   relatedSystemId: number;
   requestedPriority: string;
@@ -32,9 +34,10 @@ export interface Ticket {
   description: string;
   createdAt: string;
   updatedAt: string;
-  category?: { id: number; name: string };
-  relatedSystem?: { id: number; name: string };
+  category?: { id: number; name: string; code?: string };
+  relatedSystem?: { id: number; name: string; code?: string };
   requester?: RequesterUser;
+  owner?: { id: number; name: string; email: string; role?: string } | null;
 }
 
 export interface GetTicketsQueryParams {
@@ -106,6 +109,20 @@ export async function checkSystem(): Promise<SystemStatus> {
     return { online: true, categories: DEFAULT_CATEGORIES };
   }
 }
+
+export async function getCategories(): Promise<Category[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/categories`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    console.warn("Using default categories:", err);
+  }
+  return DEFAULT_CATEGORIES;
+}
+
 
 export async function getRequesters(): Promise<RequesterUser[]> {
   try {
@@ -511,5 +528,159 @@ export async function fetchStaffTicketQueue(params: StaffQueueParams, token?: st
   };
 }
 
+export interface CommentAuthor {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+}
 
+export interface TicketComment {
+  id: number;
+  content: string;
+  createdAt: string;
+  ticketId: number;
+  authorId: number;
+  author: CommentAuthor;
+}
 
+export interface InternalNote {
+  id: number;
+  content: string;
+  createdAt: string;
+  ticketId: number;
+  authorId: number;
+  author: CommentAuthor;
+}
+
+export interface StaffUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export async function getComments(ticketId: number, token?: string): Promise<TicketComment[]> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, { headers });
+  if (!res.ok) {
+    throw new Error("Failed to load comments");
+  }
+  return res.json();
+}
+
+export async function addComment(ticketId: number, content: string, token?: string): Promise<TicketComment> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to add comment");
+  }
+  return res.json();
+}
+
+export async function getInternalNotes(ticketId: number, token?: string): Promise<InternalNote[]> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/notes`, { headers });
+  if (!res.ok) {
+    throw new Error("Failed to load internal notes");
+  }
+  return res.json();
+}
+
+export async function addInternalNote(ticketId: number, content: string, token?: string): Promise<InternalNote> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/notes`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to add internal note");
+  }
+  return res.json();
+}
+
+export async function assignTicket(ticketId: number, ownerId: number | null, token?: string): Promise<TicketDetail> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/assign`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ ownerId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to assign ticket");
+  }
+  return res.json();
+}
+
+export async function updateTicketStatus(
+  ticketId: number,
+  payload: { status?: string; itPriority?: string },
+  token?: string
+): Promise<TicketDetail> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to update status/priority");
+  }
+  return res.json();
+}
+
+export async function indicateResolution(ticketId: number, note?: string, token?: string): Promise<{ message: string; comment: TicketComment }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/resolve-indication`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ note }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to submit resolution indication");
+  }
+  return res.json();
+}
+
+export async function getStaffUsers(token?: string): Promise<StaffUser[]> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/staff/list`, { headers });
+  if (!res.ok) {
+    throw new Error("Failed to fetch staff list");
+  }
+  return res.json();
+}

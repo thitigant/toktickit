@@ -59,3 +59,27 @@ export function requireRoles(...roles: Role[]) {
     next();
   };
 }
+
+export async function optionalAuthenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  let token: string | undefined;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.headers["x-auth-token"]) {
+    token = req.headers["x-auth-token"] as string;
+  }
+
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload) {
+      const prisma = getPrisma();
+      const user = await prisma.user.findUnique({ where: { id: payload.id } });
+      if (user && user.isActive) {
+        req.user = toSafeUser(user);
+      }
+    }
+  }
+  next();
+}
+

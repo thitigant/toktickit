@@ -1,8 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
+import bcrypt from "bcryptjs";
 import { app } from "../../src/app.js";
+import { getPrisma } from "../../src/prisma.js";
 
 describe("Lab 3: Authentication API (/api/auth)", () => {
+  beforeAll(async () => {
+    const salt = await bcrypt.genSalt(10);
+    const initialHash = await bcrypt.hash("InitialPassword123!", salt);
+    await getPrisma().user.updateMany({
+      where: { email: "staff.clara@toktickit.com" },
+      data: {
+        passwordHash: initialHash,
+        mustChangePassword: true,
+      },
+    });
+  });
+
   // AC-01 / API-01: Valid login
   it("should successfully authenticate an active user and return token and role", async () => {
     const res = await request(app)

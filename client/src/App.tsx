@@ -1,463 +1,252 @@
 import { useState, useEffect } from "react";
-import { checkSystem, getRequesters, Category, RequesterUser } from "./api";
+import { useAuth } from "./auth";
+import { getCategories, checkSystem, Category } from "./api";
+import { LoginScreen } from "./components/LoginScreen";
+import { ChangePasswordScreen } from "./components/ChangePasswordScreen";
+import { AppShell } from "./components/AppShell";
 import { CreateTicketForm } from "./components/CreateTicketForm";
 import { MyTicketsList } from "./components/MyTicketsList";
 import { RequesterTicketDetail } from "./components/RequesterTicketDetail";
+import { StaffTicketQueue } from "./components/StaffTicketQueue";
 
-type ActiveTab = "my-tickets" | "create-ticket" | "check-system";
-type AppScreen = "select-requester" | "main";
+type AppView =
+  | "login"
+  | "change-password"
+  | "my-tickets"
+  | "create-ticket"
+  | "ticket-detail"
+  | "queue"
+  | "user-management"
+  | "check-system";
 
 export default function App() {
-  const [screen, setScreen] = useState<AppScreen>("select-requester");
-  const [tab, setTab] = useState<ActiveTab>("my-tickets");
+  const { user, login, changePassword, logout } = useAuth();
+  const [view, setView] = useState<AppView>("login");
   const [categories, setCategories] = useState<Category[]>([]);
-  const [requesters, setRequesters] = useState<RequesterUser[]>([]);
-  const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(null);
-  const [pendingRequesterId, setPendingRequesterId] = useState<number | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
 
-  // System check state
-  const [checkState, setCheckState] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [checkCategories, setCheckCategories] = useState<Category[]>([]);
-  const [checkError, setCheckError] = useState<string>("");
+  // Check system state
+  const [systemCheckResult, setSystemCheckResult] = useState<{ online: boolean; categories: Category[] } | null>(null);
+  const [systemCheckError, setSystemCheckError] = useState<string | null>(null);
+  const [systemCheckLoading, setSystemCheckLoading] = useState(false);
 
+  // Determine initial view based on auth state
   useEffect(() => {
-    async function init() {
-      try {
-        const reqList = await getRequesters();
-        setRequesters(reqList);
-        if (reqList.length > 0) {
-          setPendingRequesterId(reqList[0].id);
-          setSelectedRequesterId(reqList[0].id);
-        }
-      } catch (err) {
-        console.error("Error fetching requesters:", err);
+    if (!user) {
+      if (view !== "check-system") {
+        setView("login");
       }
-
-      try {
-        const sysStatus = await checkSystem();
-        setCategories(sysStatus.categories);
-      } catch (err) {
-        console.warn("System check skipped during init:", err);
-      }
+      return;
     }
-    init();
-  }, []);
+    if (user.mustChangePassword) {
+      setView("change-password");
+      return;
+    }
+    // Default view by role
+    if (user.role === "REQUESTER") {
+      setView("my-tickets");
+    } else if (user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") {
+      setView("queue");
+    }
+  }, [user]);
 
-  async function handleCheckSystem() {
-    setCheckState("loading");
-    setCheckError("");
+  // Load categories once logged in
+  useEffect(() => {
+    if (user && !user.mustChangePassword) {
+      getCategories().then(setCategories).catch(console.warn);
+    }
+  }, [user]);
+
+  async function handleLogin(email: string, password: string) {
+    await login(email, password);
+  }
+
+  async function handleChangePassword(current: string, newPass: string, confirm: string) {
+    await changePassword(current, newPass, confirm);
+  }
+
+  async function handleLogout() {
+    await logout();
+    setView("login");
+    setSelectedTicketId(null);
+  }
+
+  function handleNavigate(targetView: string) {
+    if (targetView !== "my-tickets" && targetView !== "ticket-detail") {
+      setSelectedTicketId(null);
+    }
+    setView(targetView as AppView);
+  }
+
+  async function handleRunSystemCheck() {
+    setSystemCheckLoading(true);
+    setSystemCheckError(null);
     try {
-      const result = await checkSystem();
-      setCheckCategories(result.categories);
-      setCheckState("success");
+      const res = await checkSystem();
+      setSystemCheckResult(res);
     } catch (err) {
-      setCheckError(err instanceof Error ? err.message : "Unknown error");
-      setCheckState("error");
+      setSystemCheckError(err instanceof Error ? err.message : "Health check failed");
+    } finally {
+      setSystemCheckLoading(false);
     }
   }
 
-  const handleRequesterChange = (newId: number) => {
-    setSelectedRequesterId(newId);
-    setPendingRequesterId(newId);
-    setSelectedTicketId(null);
-  };
-
-  const handleSelectTab = (newTab: ActiveTab) => {
-    setTab(newTab);
-    if (newTab !== "my-tickets") {
-      setSelectedTicketId(null);
-    }
-  };
-
-  const handleContinue = () => {
-    if (pendingRequesterId !== null) {
-      setSelectedRequesterId(pendingRequesterId);
-      setScreen("main");
-    }
-  };
-
-  const handleCancel = () => {
-    if (requesters.length > 0) {
-      setPendingRequesterId(requesters[0].id);
-    }
-  };
-
-  const selectedRequester = requesters.find((r) => r.id === selectedRequesterId);
-
-  // ─── SCREEN: Select Development Requester ───────────────────────────────────
-  if (screen === "select-requester") {
+  // ── Check System View (Lab 1 compat) ──────────────────────────
+  if (view === "check-system") {
     return (
-      <div className="min-vh-100 d-flex flex-column" style={{ backgroundColor: "#F5F7F6" }}>
-        {/* Header */}
-        <header
-          className="navbar navbar-dark px-4 py-2 shadow-sm"
-          style={{ backgroundColor: "#006B3C" }}
-        >
-          <div className="container-fluid d-flex align-items-center justify-content-between">
-            {/* Brand */}
-            <div className="d-flex align-items-center gap-2">
-              <div
-                className="d-flex align-items-center justify-content-center rounded-circle"
-                style={{
-                  width: 36,
-                  height: 36,
-                  backgroundColor: "rgba(255,255,255,0.15)",
-                  border: "2px solid rgba(255,255,255,0.3)",
-                }}
-              >
-                <span style={{ fontSize: 18 }}>⏱</span>
-              </div>
-              <span className="navbar-brand mb-0 fw-bold fs-5">
-                TokTickIT
-              </span>
-            </div>
-
-            {/* Nav links */}
-            <div className="btn-group my-1">
-              <button
-                id="nav-my-tickets-btn"
-                className={`btn btn-sm ${tab === "my-tickets" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
-                onClick={() => { handleSelectTab("my-tickets"); setScreen("main"); }}
-              >
-                📋 My Tickets
-              </button>
-              <button
-                id="nav-create-ticket-btn"
-                className={`btn btn-sm ${tab === "create-ticket" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
-                onClick={() => { handleSelectTab("create-ticket"); setScreen("main"); }}
-              >
-                ➕ Create Ticket
-              </button>
-              <button
-                id="nav-check-system-btn"
-                className={`btn btn-sm ${tab === "check-system" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
-                onClick={() => { handleSelectTab("check-system"); setScreen("main"); }}
-              >
-                ⚙️ System Status
-              </button>
-            </div>
-
-            {/* Profile placeholder (neutral before selection) */}
-            <div className="d-flex align-items-center gap-2 text-white-50 small">
-              <div
-                className="d-flex align-items-center justify-content-center rounded-circle"
-                style={{
-                  width: 28,
-                  height: 28,
-                  backgroundColor: "rgba(255,255,255,0.1)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                }}
-              >
-                👤
-              </div>
-              <span className="text-light fw-medium">Profile ▾</span>
-            </div>
+      <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center justify-center">
+        <div className="w-full max-w-lg bg-white rounded-xl shadow-md p-6 border border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-800">TokTickIT System Status</h2>
+            <button
+              onClick={() => setView(user ? (user.role === "REQUESTER" ? "my-tickets" : "queue") : "login")}
+              className="text-sm text-gray-500 hover:text-gray-800"
+            >
+              &larr; Back
+            </button>
           </div>
-        </header>
-
-        {/* Breadcrumb */}
-        <div className="border-bottom bg-white px-4 py-2">
-          <nav aria-label="breadcrumb">
-            <ol className="breadcrumb mb-0 small">
-              <li className="breadcrumb-item">
-                <span style={{ color: "#006B3C" }}>🏠</span>
-              </li>
-              <li className="breadcrumb-item active text-muted" aria-current="page">
-                Development Requester Selection
-              </li>
-            </ol>
-          </nav>
-        </div>
-
-        {/* Main content – centered card */}
-        <main className="flex-grow-1 d-flex align-items-start justify-content-center py-5 px-3">
-          <div
-            className="card border shadow-sm rounded-3 p-4"
-            style={{ width: "100%", maxWidth: 500, backgroundColor: "#fff", marginTop: "2rem" }}
+          <button
+            onClick={handleRunSystemCheck}
+            disabled={systemCheckLoading}
+            className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-lg text-sm mb-4"
           >
-            {/* Icon */}
-            <div className="text-center mb-3">
-              <div
-                className="d-inline-flex align-items-center justify-content-center rounded-circle"
-                style={{ width: 64, height: 64, backgroundColor: "#E8F5EE", border: "2px solid #C8E6D6" }}
-              >
-                <span style={{ fontSize: 30 }}>👥</span>
-              </div>
+            {systemCheckLoading ? "Checking..." : "Check System"}
+          </button>
+          {systemCheckError && (
+            <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm mb-3">
+              <span className="font-bold">Offline:</span> {systemCheckError}
             </div>
-
-            {/* Title & Subtitle */}
-            <h1 className="h5 fw-bold text-center mb-1" style={{ color: "#1a1a1a" }}>
-              Select Development Requester
-            </h1>
-            <p className="text-center text-muted small mb-4">
-              Choose a development requester to simulate the current requester context for Lab 2.<br />
-              This is for testing only and is not a login screen.
-            </p>
-
-            <hr className="my-3" />
-
-            {/* Dropdown */}
-            <div className="mb-3">
-              <label
-                htmlFor="dev-requester-select"
-                className="form-label small fw-semibold"
-                style={{ color: "#1a1a1a" }}
-              >
-                Development Requester <span className="text-danger">*</span>
-              </label>
-              <select
-                id="dev-requester-select"
-                className="form-select"
-                value={pendingRequesterId ?? ""}
-                onChange={(e) => setPendingRequesterId(Number(e.target.value))}
-              >
-                {requesters.length === 0 && (
-                  <option value="">Loading requesters…</option>
-                )}
-                {requesters.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} {r.department ? `(${r.department})` : ""}
-                  </option>
+          )}
+          {systemCheckResult && (
+            <div>
+              <div className="p-3 bg-green-50 text-green-800 border border-green-200 rounded-lg text-sm font-semibold mb-3">
+                Status: {systemCheckResult.online ? "Online" : "Offline"}
+              </div>
+              <h3 className="font-semibold text-sm text-gray-700 mb-2">Categories:</h3>
+              <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                {systemCheckResult.categories.map((c) => (
+                  <li key={c.id}>{c.name}</li>
                 ))}
-              </select>
+              </ul>
             </div>
-
-            {/* Info alert */}
-            <div
-              className="d-flex align-items-center gap-2 rounded px-3 py-2 mb-4 small"
-              style={{ backgroundColor: "#EAF6EE", border: "1px solid #A8D5B5", color: "#006B3C" }}
-            >
-              <span>ℹ️</span>
-              <span>Only active development requesters are shown.</span>
-            </div>
-
-            {/* Auth notice */}
-            <div
-              className="d-flex align-items-start gap-3 rounded px-3 py-3 mb-4"
-              style={{ backgroundColor: "#FAFAFA", border: "1px solid #E0E0E0" }}
-            >
-              <div
-                className="d-flex align-items-center justify-content-center flex-shrink-0 rounded-circle"
-                style={{ width: 36, height: 36, backgroundColor: "#E8F0FE", border: "1px solid #C5D5F5" }}
-              >
-                🛡️
-              </div>
-              <div>
-                <p className="mb-1 fw-semibold small" style={{ color: "#1a1a1a" }}>
-                  Authentication coming in Lab 3
-                </p>
-                <p className="mb-0 text-muted" style={{ fontSize: "0.8rem" }}>
-                  In Lab 3, this selection will be replaced with secure authentication
-                  so you can access the system with your own account.
-                </p>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="d-flex justify-content-end gap-2">
-              <button
-                id="requester-cancel-btn"
-                className="btn btn-outline-secondary"
-                onClick={handleCancel}
-              >
-                Cancel
-              </button>
-              <button
-                id="requester-continue-btn"
-                className="btn fw-semibold text-white d-flex align-items-center gap-1"
-                style={{ backgroundColor: "#006B3C", border: "none", padding: "8px 20px" }}
-                onClick={handleContinue}
-                disabled={pendingRequesterId === null || requesters.length === 0}
-              >
-                Continue →
-              </button>
-            </div>
-          </div>
-        </main>
+          )}
+        </div>
       </div>
     );
   }
 
-  // ─── SCREEN: Main App ────────────────────────────────────────────────────────
+  // ── Not logged in ────────────────────────────────────────────
+  if (!user || view === "login") {
+    return (
+      <LoginScreen
+        onLoginSuccess={() => {
+          /* handled by useEffect */
+        }}
+        loginFn={handleLogin}
+        onSystemStatusClick={() => setView("check-system")}
+      />
+    );
+  }
+
+  // ── Force Password Change ─────────────────────────────────────
+  if (user.mustChangePassword) {
+    return (
+      <ChangePasswordScreen
+        userName={user.name}
+        onPasswordChanged={() => {
+          /* handled by useEffect */
+        }}
+        changePasswordFn={handleChangePassword}
+      />
+    );
+  }
+
+  // ── Main App (Authenticated) ─────────────────────────────────
   return (
-    <div className="min-vh-100 d-flex flex-column" style={{ backgroundColor: "#F5F7F6" }}>
-      {/* Zen Green Navigation Header */}
-      <header className="navbar navbar-expand-lg navbar-dark shadow-sm px-4" style={{ backgroundColor: "#006B3C" }}>
-        <div className="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-2">
-          {/* Identity */}
-          <div className="d-flex align-items-center gap-2">
-            <div
-              className="d-flex align-items-center justify-content-center rounded-circle"
-              style={{ width: 36, height: 36, backgroundColor: "rgba(255,255,255,0.15)", border: "2px solid rgba(255,255,255,0.3)" }}
-            >
-              <span style={{ fontSize: 18 }}>⏱</span>
-            </div>
-            <span className="navbar-brand mb-0 fw-bold fs-5">
-              TokTickIT
-            </span>
-          </div>
-
-          {/* Navigation Links */}
-          <div className="btn-group my-1">
-            <button
-              id="nav-my-tickets-btn"
-              className={`btn btn-sm ${tab === "my-tickets" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
-              onClick={() => handleSelectTab("my-tickets")}
-            >
-              📋 My Tickets
-            </button>
-            <button
-              id="nav-create-ticket-btn"
-              className={`btn btn-sm ${tab === "create-ticket" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
-              onClick={() => handleSelectTab("create-ticket")}
-            >
-              ➕ Create Ticket
-            </button>
-            <button
-              id="nav-check-system-btn"
-              className={`btn btn-sm ${tab === "check-system" ? "btn-light text-success fw-bold shadow-sm" : "btn-outline-light"}`}
-              onClick={() => handleSelectTab("check-system")}
-            >
-              ⚙️ System Status
-            </button>
-          </div>
-
-          {/* Profile Badge (bound to selectedRequester.name) */}
-          <div
-            className="d-flex align-items-center gap-2 text-white small"
-            style={{ cursor: "pointer" }}
-            onClick={() => setScreen("select-requester")}
-            title="Click to switch requester identity"
-          >
-            <div
-              className="d-flex align-items-center justify-content-center rounded-circle"
-              style={{
-                width: 30,
-                height: 30,
-                backgroundColor: "rgba(255,255,255,0.15)",
-                border: "1px solid rgba(255,255,255,0.3)",
-              }}
-            >
-              👤
-            </div>
-            <span className="fw-medium">{selectedRequester ? `${selectedRequester.name} ▾` : "Profile ▾"}</span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="container flex-grow-1 py-4">
-        {/* Requester Context Info Banner */}
-        {selectedRequester && (
-          <div
-            className="alert alert-success d-flex flex-wrap justify-content-between align-items-center py-2 px-3 mb-4 rounded shadow-sm"
-            style={{ backgroundColor: "#EAF6EF", borderColor: "#0B7A46", color: "#006B3C" }}
-          >
-            <div className="small d-flex align-items-center gap-2 flex-wrap">
-              <span><strong>Testing Context:</strong> Logged in as <strong>{selectedRequester.name}</strong> ({selectedRequester.email} &bull; {selectedRequester.department})</span>
-              <div className="d-inline-flex align-items-center gap-1 ms-2">
-                <span className="text-muted small">Switch:</span>
-                <select
-                  id="app-requester-selector"
-                  className="form-select form-select-sm py-0 px-2 text-dark fw-semibold border-success"
-                  style={{ width: "auto", fontSize: "0.82rem", cursor: "pointer" }}
-                  value={selectedRequesterId ?? ""}
-                  onChange={(e) => handleRequesterChange(Number(e.target.value))}
-                >
-                  {requesters.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} ({r.department})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <span className="badge bg-success bg-opacity-75 text-white">Dev Requester Mode</span>
-          </div>
+    <AppShell
+      user={user}
+      onLogout={handleLogout}
+      activeView={view}
+      onNavigate={handleNavigate}
+    >
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Ticket Detail for All Roles */}
+        {view === "ticket-detail" && selectedTicketId && (
+          <RequesterTicketDetail
+            ticketId={selectedTicketId}
+            requesterId={user.id}
+            user={user}
+            onBack={() => {
+              setSelectedTicketId(null);
+              if (user.role === "REQUESTER") {
+                setView("my-tickets");
+              } else {
+                setView("queue");
+              }
+            }}
+          />
         )}
 
-        {/* Tab 1: My Tickets & Ticket Detail View */}
-        {tab === "my-tickets" && selectedRequesterId && (
-          selectedTicketId ? (
-            <RequesterTicketDetail
-              ticketId={selectedTicketId}
-              requesterId={selectedRequesterId}
-              onBack={() => setSelectedTicketId(null)}
-            />
-          ) : (
-            <MyTicketsList
-              requesterId={selectedRequesterId}
-              categories={categories}
-              onCreateTicketClick={() => handleSelectTab("create-ticket")}
-              onSelectTicket={(id) => setSelectedTicketId(id)}
-            />
-          )
+        {/* Requester Views */}
+        {user.role === "REQUESTER" && view === "my-tickets" && (
+          <MyTicketsList
+            requesterId={user.id}
+            categories={categories}
+            onCreateTicketClick={() => setView("create-ticket")}
+            onSelectTicket={(id) => {
+              setSelectedTicketId(id);
+              setView("ticket-detail");
+            }}
+          />
         )}
 
-        {/* Tab 2: Create Ticket */}
-        {tab === "create-ticket" && (
-          <div className="d-flex justify-content-center">
-            <div style={{ width: "100%", maxWidth: 680 }}>
-              <CreateTicketForm />
+        {view === "create-ticket" && (
+          <div className="flex justify-center">
+            <div className="w-full max-w-2xl">
+              <CreateTicketForm
+                user={user}
+                onSuccess={(ticket) => {
+                  setSelectedTicketId(ticket.id);
+                  setView("ticket-detail");
+                }}
+              />
             </div>
           </div>
         )}
 
-        {/* Tab 3: Check System Status */}
-        {tab === "check-system" && (
-          <div className="d-flex justify-content-center">
-            <div style={{ width: "100%", maxWidth: 650 }}>
-              <div className="card shadow-sm border-0 p-4">
-                <h1 className="h4 text-center fw-bold mb-2">TokTickIT IT Service Desk</h1>
-                <p className="text-center text-muted small mb-4">
-                  Internal Service Desk Portal for IT Support Requests
-                </p>
+        {/* IT Staff / Admin Views */}
+        {(user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") && view === "queue" && (
+          <StaffTicketQueue
+            categories={categories}
+            currentUser={{ id: user.id, name: user.name, role: user.role }}
+            onSelectTicket={(id) => {
+              setSelectedTicketId(id);
+              setView("ticket-detail");
+            }}
+          />
+        )}
 
-                <button
-                  id="check-system-btn"
-                  className="btn btn-primary w-100 mb-4"
-                  onClick={handleCheckSystem}
-                  disabled={checkState === "loading"}
-                >
-                  {checkState === "loading" ? "Loading…" : "Check System"}
-                </button>
-
-                {checkState === "success" && (
-                  <div id="status-online">
-                    <div className="bg-light rounded p-3 mb-4">
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <span className="fw-bold">System Status:</span>
-                        <span className="badge bg-success fs-6">Online</span>
-                      </div>
-                      <p className="text-center text-muted small mb-0">Service: TokTickIT API</p>
-                    </div>
-
-                    <h2 className="h6 text-center fw-bold mb-3">Supported Request Categories</h2>
-                    <ul id="category-list" className="list-group list-group-flush border rounded">
-                      {checkCategories.map((cat) => (
-                        <li key={cat.id} className="list-group-item d-flex justify-content-between align-items-center">
-                          {cat.name}
-                          <span className="badge bg-secondary rounded-pill">#{cat.id}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {checkState === "error" && (
-                  <div id="status-offline" className="mt-4">
-                    <div className="alert alert-danger text-center p-3 mb-4" id="error-message">
-                      <div className="fw-bold text-danger">System Error</div>
-                      <div className="text-danger small">System Status: Offline ({checkError})</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+        {/* Admin: User Management placeholder */}
+        {user.role === "ADMINISTRATOR" && view === "user-management" && (
+          <div className="text-center py-20 text-gray-400">
+            <p className="text-5xl mb-4">👥</p>
+            <p className="text-lg font-semibold text-gray-600">User Management</p>
+            <p className="text-sm text-gray-400 mt-1">Coming soon in Issue #26</p>
           </div>
         )}
-      </main>
-    </div>
+
+        {/* Change Password (profile action) */}
+        {view === "change-password" && (
+          <ChangePasswordScreen
+            userName={user.name}
+            onPasswordChanged={() => {
+              if (user.role === "REQUESTER") setView("my-tickets");
+              else setView("queue");
+            }}
+            changePasswordFn={handleChangePassword}
+          />
+        )}
+      </div>
+    </AppShell>
   );
 }
