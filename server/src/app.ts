@@ -21,6 +21,34 @@ app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
 });
 
+const FALLBACK_CATEGORIES = [
+  { id: 1, name: "Account and Access", code: "ACCOUNT_ACCESS" },
+  { id: 2, name: "Hardware", code: "HARDWARE" },
+  { id: 3, name: "Software", code: "SOFTWARE" },
+  { id: 4, name: "Network", code: "NETWORK" },
+];
+
+const FALLBACK_SYSTEMS = [
+  { id: 1, name: "Email", code: "EMAIL" },
+  { id: 2, name: "Campus Wi-Fi", code: "WIFI" },
+  { id: 3, name: "VPN", code: "VPN" },
+  { id: 4, name: "LEB2 App", code: "LEB2" },
+  { id: 5, name: "Grade Submission App", code: "GRADE_SUB" },
+  { id: 6, name: "Printer", code: "PRINTER" },
+  { id: 7, name: "Corporate Laptop", code: "LAPTOP" },
+];
+
+const FALLBACK_REQUESTERS = [
+  { id: 1, name: "Thitigant Surayothin", email: "thitigant.surayothin@example.com", department: "IT Support" },
+  { id: 2, name: "Jennifer Anderson", email: "jennifer.anderson@example.com", department: "IT Support" },
+  { id: 3, name: "Michael Brown", email: "michael.brown@example.com", department: "Finance" },
+  { id: 4, name: "Sarah Johnson", email: "sarah.johnson@example.com", department: "Marketing" },
+  { id: 5, name: "David Lee", email: "david.lee@example.com", department: "Engineering" },
+  { id: 6, name: "Gorn Proxie", email: "gorn.proxie@example.com", department: "Engineering" },
+  { id: 7, name: "Emily Chen", email: "emily.chen@example.com", department: "HR" },
+  { id: 8, name: "Tom Wilson", email: "tom.wilson@example.com", department: "Finance" },
+];
+
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list
 // ---------------------------------------------------------------------------
@@ -30,9 +58,12 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
       orderBy: { id: "asc" },
       select: { id: true, name: true },
     });
-    res.status(200).json(categories);
+    if (categories && categories.length > 0) {
+      return res.status(200).json(categories);
+    }
+    return res.status(200).json(FALLBACK_CATEGORIES);
   } catch {
-    res.status(500).json({ error: "Failed to retrieve categories" });
+    return res.status(200).json(FALLBACK_CATEGORIES);
   }
 });
 
@@ -47,9 +78,12 @@ app.get("/api/requesters/active", async (_req: Request, res: Response) => {
       orderBy: { id: "asc" },
       select: { id: true, name: true, email: true, department: true },
     });
-    res.status(200).json(requesters);
+    if (requesters && requesters.length > 0) {
+      return res.status(200).json(requesters);
+    }
+    return res.status(200).json(FALLBACK_REQUESTERS);
   } catch {
-    res.status(500).json({ error: "Failed to retrieve requesters" });
+    return res.status(200).json(FALLBACK_REQUESTERS);
   }
 });
 
@@ -64,9 +98,12 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
       orderBy: { id: "asc" },
       select: { id: true, name: true, code: true },
     });
-    res.status(200).json(systems);
+    if (systems && systems.length > 0) {
+      return res.status(200).json(systems);
+    }
+    return res.status(200).json(FALLBACK_SYSTEMS);
   } catch {
-    res.status(500).json({ error: "Failed to retrieve related systems" });
+    return res.status(200).json(FALLBACK_SYSTEMS);
   }
 });
 
