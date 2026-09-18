@@ -684,3 +684,129 @@ export async function getStaffUsers(token?: string): Promise<StaffUser[]> {
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Admin User Management API
+// ---------------------------------------------------------------------------
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  department: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedUsers {
+  data: AdminUser[];
+  pagination: {
+    totalItems: number;
+    currentPage: number;
+    totalPages: number;
+    pageSize: number;
+  };
+}
+
+export interface FetchUsersParams {
+  search?: string;
+  role?: string;
+  isActive?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export async function fetchUsers(params?: FetchUsersParams, token?: string): Promise<PaginatedUsers> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.role) searchParams.set("role", params.role);
+  if (params?.isActive) searchParams.set("isActive", params.isActive);
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.sortBy) searchParams.set("sortBy", params.sortBy);
+  if (params?.sortOrder) searchParams.set("sortOrder", params.sortOrder);
+
+  const qs = searchParams.toString();
+  const res = await fetch(`${API_URL}/api/admin/users${qs ? `?${qs}` : ""}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to fetch users");
+  }
+  return res.json();
+}
+
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  role: string;
+  department?: string;
+  initialPassword: string;
+}
+
+export async function createUser(input: CreateUserInput, token?: string): Promise<AdminUser> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const msg = Array.isArray(data.message) ? data.message.join(", ") : data.message || data.error || "Failed to create user";
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+  role?: string;
+  department?: string | null;
+  isActive?: boolean;
+}
+
+export async function updateUser(userId: number, input: UpdateUserInput, token?: string): Promise<AdminUser> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to update user");
+  }
+  return res.json();
+}
+
+export async function resetUserPassword(userId: number, newPassword: string, token?: string): Promise<{ message: string }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}/reset-password`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to reset password");
+  }
+  return res.json();
+}
