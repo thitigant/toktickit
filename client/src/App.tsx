@@ -8,6 +8,7 @@ import { CreateTicketForm } from "./components/CreateTicketForm";
 import { MyTicketsList } from "./components/MyTicketsList";
 import { RequesterTicketDetail } from "./components/RequesterTicketDetail";
 import { StaffTicketQueue } from "./components/StaffTicketQueue";
+import { UserManagement } from "./components/UserManagement";
 
 type AppView =
   | "login"
@@ -226,13 +227,9 @@ export default function App() {
           />
         )}
 
-        {/* Admin: User Management placeholder */}
+        {/* Admin: User Management */}
         {user.role === "ADMINISTRATOR" && view === "user-management" && (
-          <div className="text-center py-20 text-gray-400">
-            <p className="text-5xl mb-4">👥</p>
-            <p className="text-lg font-semibold text-gray-600">User Management</p>
-            <p className="text-sm text-gray-400 mt-1">Coming soon in Issue #26</p>
-          </div>
+          <UserManagement currentUserId={user.id} />
         )}
 
         {/* Change Password (profile action) */}
