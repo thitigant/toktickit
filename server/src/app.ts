@@ -1,7 +1,9 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import { Role } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
 import { authRouter } from "./modules/auth/auth.router.js";
+import { authenticate, requireRoles } from "./modules/auth/auth.middleware.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
 void getPrisma;
@@ -669,4 +671,115 @@ app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Lab 3 Issue 3 — GET /api/staff/tickets
+// Retrieve IT Staff Ticket Queue with search, filtering, sorting, and pagination.
+// Restricted to IT_STAFF and ADMINISTRATOR roles.
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/staff/tickets",
+  authenticate,
+  requireRoles(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        search,
+        status,
+        requestedPriority,
+        itPriority,
+        categoryId,
+        ownerId,
+        page = "1",
+        limit = "10",
+        sortBy = "createdAt",
+        sortOrder = "desc",
+      } = req.query;
+
+      const where: any = {};
+
+      if (search && typeof search === "string" && search.trim() !== "") {
+        const query = search.trim();
+        where.OR = [
+          { ticketNumber: { contains: query, mode: "insensitive" } },
+          { summary: { contains: query, mode: "insensitive" } },
+        ];
+      }
+
+      if (status && typeof status === "string" && status !== "ALL") {
+        where.currentStatus = status;
+      }
+
+      if (requestedPriority && typeof requestedPriority === "string" && requestedPriority !== "ALL") {
+        where.requestedPriority = requestedPriority;
+      }
+
+      if (itPriority && typeof itPriority === "string" && itPriority !== "ALL") {
+        where.itPriority = itPriority;
+      }
+
+      if (categoryId && categoryId !== "ALL") {
+        const parsedCat = parseInt(String(categoryId), 10);
+        if (!isNaN(parsedCat)) {
+          where.categoryId = parsedCat;
+        }
+      }
+
+      if (ownerId && typeof ownerId === "string" && ownerId !== "ALL") {
+        if (ownerId === "unassigned") {
+          where.ownerId = null;
+        } else if (ownerId === "me" && req.user) {
+          where.ownerId = req.user.id;
+        } else {
+          const parsedOwner = parseInt(String(ownerId), 10);
+          if (!isNaN(parsedOwner)) {
+            where.ownerId = parsedOwner;
+          }
+        }
+      }
+
+      const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
+
+      const allowedSortFields = ["createdAt", "updatedAt", "ticketNumber", "requestedPriority", "itPriority", "currentStatus"];
+      const sortField = allowedSortFields.includes(String(sortBy)) ? String(sortBy) : "createdAt";
+      const order = String(sortOrder).toLowerCase() === "asc" ? "asc" : "desc";
+
+      const prisma = getPrisma();
+      const total = await prisma.ticket.count({ where });
+      const tickets = await prisma.ticket.findMany({
+        where,
+        orderBy: { [sortField]: order },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        include: {
+          requester: { select: { id: true, name: true, email: true } },
+          owner: { select: { id: true, name: true, email: true } },
+          category: { select: { id: true, name: true, code: true } },
+          relatedSystem: { select: { id: true, name: true, code: true } },
+          _count: {
+            select: {
+              comments: true,
+              internalNotes: true,
+              attachments: { where: { isRemoved: false } },
+            },
+          },
+        },
+      });
+
+      return res.status(200).json({
+        data: tickets,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum) || 1,
+        },
+      });
+    } catch {
+      return res.status(500).json({ error: "Failed to retrieve IT Staff ticket queue" });
+    }
+  }
+);
+
 export default app;
+
