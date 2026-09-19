@@ -11,10 +11,16 @@ import {
   DEFAULT_CATEGORIES,
   DEFAULT_RELATED_SYSTEMS,
 } from "../api";
+import { AuthUser } from "../auth";
 
-export function CreateTicketForm() {
+interface CreateTicketFormProps {
+  user?: AuthUser;
+  onSuccess?: (ticket: Ticket) => void;
+}
+
+export function CreateTicketForm({ user, onSuccess }: CreateTicketFormProps) {
   const [requesters, setRequesters] = useState<RequesterUser[]>([]);
-  const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(1);
+  const [selectedRequesterId, setSelectedRequesterId] = useState<number | null>(user?.id || 1);
 
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [systems, setSystems] = useState<RelatedSystem[]>(DEFAULT_RELATED_SYSTEMS);
@@ -31,6 +37,12 @@ export function CreateTicketForm() {
   const [createdTicket, setCreatedTicket] = useState<Ticket | null>(null);
 
   useEffect(() => {
+    if (user?.id) {
+      setSelectedRequesterId(user.id);
+    }
+  }, [user]);
+
+  useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
@@ -41,7 +53,7 @@ export function CreateTicketForm() {
         ]);
 
         setRequesters(reqList);
-        if (reqList.length > 0) {
+        if (!user && reqList.length > 0) {
           setSelectedRequesterId(reqList[0].id);
         }
 
@@ -61,12 +73,13 @@ export function CreateTicketForm() {
       }
     }
     loadData();
-  }, []);
+  }, [user]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!selectedRequesterId) {
-      setErrorMsg("Please select a Development Requester");
+    const effectiveRequesterId = user?.id || selectedRequesterId;
+    if (!effectiveRequesterId) {
+      setErrorMsg("Please select a requester");
       return;
     }
 
@@ -93,11 +106,14 @@ export function CreateTicketForm() {
           summary: summary.trim(),
           description: description.trim(),
         },
-        selectedRequesterId
+        effectiveRequesterId
       );
       setCreatedTicket(ticket);
       setSummary("");
       setDescription("");
+      if (onSuccess) {
+        onSuccess(ticket);
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to create ticket");
     } finally {
@@ -125,24 +141,34 @@ export function CreateTicketForm() {
         Fill in the details below to submit a new IT support request.
       </p>
 
-      {/* Development Requester Selector */}
-      <div className="mb-4 p-3 rounded" style={{ backgroundColor: "#EAF6EF", border: "1px solid #0B7A46" }}>
-        <label htmlFor="requester-select" className="form-label fw-bold mb-1" style={{ color: "#006B3C" }}>
-          Development Requester Context (Simulated Login)
-        </label>
-        <select
-          id="requester-select"
-          className="form-select border-success"
-          value={selectedRequesterId ?? ""}
-          onChange={(e) => setSelectedRequesterId(Number(e.target.value))}
-        >
-          {requesters.map((req) => (
-            <option key={req.id} value={req.id}>
-              {req.name} ({req.email}) — {req.department}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Authenticated User info or Development Requester Selector */}
+      {user ? (
+        <div className="mb-4 p-3 rounded d-flex align-items-center gap-2" style={{ backgroundColor: "#EAF6EF", border: "1px solid #0B7A46" }}>
+          <span>👤</span>
+          <div>
+            <div className="fw-bold small text-success">Creating ticket as:</div>
+            <div className="text-dark fw-semibold small">{user.name} ({user.email})</div>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 p-3 rounded" style={{ backgroundColor: "#EAF6EF", border: "1px solid #0B7A46" }}>
+          <label htmlFor="requester-select" className="form-label fw-bold mb-1" style={{ color: "#006B3C" }}>
+            Development Requester Context (Simulated Login)
+          </label>
+          <select
+            id="requester-select"
+            className="form-select border-success"
+            value={selectedRequesterId ?? ""}
+            onChange={(e) => setSelectedRequesterId(Number(e.target.value))}
+          >
+            {requesters.map((req) => (
+              <option key={req.id} value={req.id}>
+                {req.name} ({req.email}) — {req.department}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {createdTicket && (
         <div className="alert alert-success d-flex align-items-center mb-4" id="ticket-success-alert">

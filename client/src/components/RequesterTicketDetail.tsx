@@ -3,25 +3,68 @@ import {
   getTicketDetail,
   uploadAttachment,
   removeAttachment,
+  getComments,
+  addComment,
+  getInternalNotes,
+  addInternalNote,
+  assignTicket,
+  updateTicketStatus,
+  indicateResolution,
+  getStaffUsers,
   TicketDetail,
   Attachment,
+  TicketComment,
+  InternalNote,
+  StaffUser,
 } from "../api";
+import { AuthUser } from "../auth";
 
 interface RequesterTicketDetailProps {
   ticketId: number;
-  requesterId: number;
+  requesterId?: number;
+  user?: AuthUser;
   onBack: () => void;
 }
 
 export function RequesterTicketDetail({
   ticketId,
   requesterId,
+  user,
   onBack,
 }: RequesterTicketDetailProps) {
+  const effectiveRequesterId = user?.id || requesterId || 1;
+  const isStaffOrAdmin = user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR";
+
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"comments" | "attachments" | "actions" | "eventlog">("attachments");
+  const [activeTab, setActiveTab] = useState<"comments" | "notes" | "attachments" | "actions">("attachments");
+
+  // Comments state
+  const [comments, setComments] = useState<TicketComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  // Internal Notes state
+  const [notes, setNotes] = useState<InternalNote[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [submittingNote, setSubmittingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+
+  // Staff Operations state
+  const [staffList, setStaffList] = useState<StaffUser[]>([]);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [selectedItPriority, setSelectedItPriority] = useState<string>("");
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
+  const [updatingAction, setUpdatingAction] = useState(false);
+
+  // Problem Resolved Indication state
+  const [resolvingModal, setResolvingModal] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [submittingResolve, setSubmittingResolve] = useState(false);
 
   // Attachment upload state
   const [uploading, setUploading] = useState(false);
@@ -37,26 +80,154 @@ export function RequesterTicketDetail({
   const [removalReason, setRemovalReason] = useState("");
   const [removalError, setRemovalError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
-
   const fetchDetail = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getTicketDetail(ticketId, requesterId);
+      const data = await getTicketDetail(ticketId, effectiveRequesterId);
       setTicket(data);
+      if (data && (data as any).comments) {
+        setComments((data as any).comments);
+      }
+      if (data && (data as any).internalNotes) {
+        setNotes((data as any).internalNotes);
+      }
+      setSelectedStatus(data?.currentStatus || "NEW");
+      setSelectedItPriority(data?.itPriority || data?.requestedPriority || "MEDIUM");
+      setSelectedOwnerId(data?.ownerId ? String(data.ownerId) : "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ticket detail");
     } finally {
       setLoading(false);
     }
-  }, [ticketId, requesterId]);
+  }, [ticketId, effectiveRequesterId]);
 
   useEffect(() => {
     fetchDetail();
-  }, [fetchDetail]);
+    if (isStaffOrAdmin) {
+      try {
+        getStaffUsers()
+          .then(setStaffList)
+          .catch(() => {});
+      } catch {}
+    }
+  }, [fetchDetail, isStaffOrAdmin]);
 
   const activeAttachments = ticket?.attachments?.filter((a) => !a.isRemoved) ?? [];
   const removedAttachments = ticket?.attachments?.filter((a) => a.isRemoved) ?? [];
+
+  // Submit Comment
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newComment.trim();
+    if (!trimmed || trimmed.length > 2000) return;
+
+    setSubmittingComment(true);
+    setCommentError(null);
+    try {
+      const created = await addComment(ticketId, trimmed);
+      setComments((prev) => [...prev, created]);
+      setNewComment("");
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : "Failed to post comment");
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  // Submit Internal Note
+  const handlePostNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newNote.trim();
+    if (!trimmed || trimmed.length > 2000) return;
+
+    setSubmittingNote(true);
+    setNoteError(null);
+    try {
+      const created = await addInternalNote(ticketId, trimmed);
+      setNotes((prev) => [...prev, created]);
+      setNewNote("");
+    } catch (err) {
+      setNoteError(err instanceof Error ? err.message : "Failed to post internal note");
+    } finally {
+      setSubmittingNote(false);
+    }
+  };
+
+  // Claim Ticket
+  const handleClaimTicket = async () => {
+    if (!user) return;
+    setUpdatingAction(true);
+    setActionErrorMsg(null);
+    setActionSuccessMsg(null);
+    try {
+      const updated = await assignTicket(ticketId, user.id);
+      setTicket(updated);
+      setSelectedOwnerId(String(user.id));
+      setActionSuccessMsg("You have successfully claimed this ticket!");
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err) {
+      setActionErrorMsg(err instanceof Error ? err.message : "Failed to claim ticket");
+    } finally {
+      setUpdatingAction(false);
+    }
+  };
+
+  // Assign Ticket
+  const handleAssignTicket = async (newOwnerIdStr: string) => {
+    setSelectedOwnerId(newOwnerIdStr);
+    setUpdatingAction(true);
+    setActionErrorMsg(null);
+    setActionSuccessMsg(null);
+    try {
+      const ownerId = newOwnerIdStr === "" || newOwnerIdStr === "unassigned" ? null : parseInt(newOwnerIdStr, 10);
+      const updated = await assignTicket(ticketId, ownerId);
+      setTicket(updated);
+      setActionSuccessMsg(ownerId ? "Ticket reassigned successfully!" : "Ticket unassigned successfully!");
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err) {
+      setActionErrorMsg(err instanceof Error ? err.message : "Failed to assign ticket");
+    } finally {
+      setUpdatingAction(false);
+    }
+  };
+
+  // Update Status & IT Priority
+  const handleUpdateStatusAndPriority = async () => {
+    setUpdatingAction(true);
+    setActionErrorMsg(null);
+    setActionSuccessMsg(null);
+    try {
+      const updated = await updateTicketStatus(ticketId, {
+        status: selectedStatus,
+        itPriority: selectedItPriority,
+      });
+      setTicket(updated);
+      setActionSuccessMsg("Status and IT Priority updated successfully!");
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err) {
+      setActionErrorMsg(err instanceof Error ? err.message : "Failed to update status/priority");
+    } finally {
+      setUpdatingAction(false);
+    }
+  };
+
+  // Indicate Problem Resolved
+  const handleIndicateResolved = async () => {
+    setSubmittingResolve(true);
+    try {
+      const res = await indicateResolution(ticketId, resolveNote);
+      setComments((prev) => [...prev, res.comment]);
+      setResolvingModal(false);
+      setResolveNote("");
+      setActionSuccessMsg("Your resolution note has been sent to IT Support!");
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to submit resolution indication");
+    } finally {
+      setSubmittingResolve(false);
+    }
+  };
 
   const handleSimulatedFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
@@ -94,7 +265,7 @@ export function RequesterTicketDetail({
     setUploading(true);
     setUploadError(null);
     try {
-      await uploadAttachment(ticket.id, selectedFile, requesterId);
+      await uploadAttachment(ticket.id, selectedFile, effectiveRequesterId);
       setSelectedFile(null);
       fetchDetail();
     } catch (err) {
@@ -114,7 +285,7 @@ export function RequesterTicketDetail({
     setRemoving(true);
     setRemovalError(null);
     try {
-      await removeAttachment(removingAttachment.id, removalReason.trim(), requesterId);
+      await removeAttachment(removingAttachment.id, removalReason.trim(), effectiveRequesterId);
       setRemovingAttachment(null);
       setRemovalReason("");
       fetchDetail();
@@ -126,7 +297,7 @@ export function RequesterTicketDetail({
   };
 
   const formatDateTime = (dateStr?: string) => {
-    if (!dateStr) return "May 12, 2025 09:14 AM";
+    if (!dateStr) return "-";
     const d = new Date(dateStr);
     return (
       d.toLocaleDateString("en-US", {
@@ -148,7 +319,7 @@ export function RequesterTicketDetail({
     let color = "#D97706";
     let border = "#FBBF24";
 
-    if (val === "HIGH" || val === "URGENT") {
+    if (val === "HIGH" || val === "URGENT" || val === "CRITICAL") {
       bg = "#FDE8E8";
       color = "#E53E3E";
       border = "#F87171";
@@ -178,27 +349,27 @@ export function RequesterTicketDetail({
   };
 
   const renderStatusPill = (status?: string) => {
-    const val = (status || "IN_PROGRESS").toUpperCase();
+    const val = (status || "NEW").toUpperCase().replace(/\s+/g, "_");
     let bg = "#DEF7EC";
     let color = "#03543F";
     let border = "#34D399";
-    let label = "In Progress";
+    let label = status || "New";
 
     if (val === "NEW" || val === "OPEN") {
       bg = "#E1F5FE";
       color = "#0288D1";
       border = "#38BDF8";
-      label = "Open";
+      label = val === "NEW" ? "New" : "Open";
     } else if (val === "IN_PROGRESS") {
       bg = "#DEF7EC";
       color = "#03543F";
       border = "#34D399";
       label = "In Progress";
-    } else if (val === "PENDING") {
+    } else if (val === "WAITING_FOR_REQUESTER" || val === "PENDING") {
       bg = "#FEF3C7";
       color = "#D97706";
       border = "#FBBF24";
-      label = "Pending";
+      label = "Waiting for Requester";
     } else if (val === "RESOLVED") {
       bg = "#D1E7DD";
       color = "#0F5132";
@@ -209,6 +380,16 @@ export function RequesterTicketDetail({
       color = "#475569";
       border = "#CBD5E1";
       label = "Closed";
+    } else if (val === "CANCELLED" || val === "CANCELED") {
+      bg = "#FEE2E2";
+      color = "#991B1B";
+      border = "#FCA5A5";
+      label = "Cancelled";
+    } else if (val === "REOPENED") {
+      bg = "#EDE9FE";
+      color = "#5B21B6";
+      border = "#C4B5FD";
+      label = "Reopened";
     }
 
     return (
@@ -250,7 +431,7 @@ export function RequesterTicketDetail({
     return (
       <div className="w-100">
         <button className="btn btn-outline-secondary btn-sm mb-3" onClick={onBack}>
-          &larr; Back to My Tickets
+          &larr; Back to Tickets
         </button>
         <div className="alert alert-danger p-4 rounded shadow-sm" id="ticket-detail-error">
           <div className="fw-bold fs-5 mb-1">Access Denied or Error</div>
@@ -260,6 +441,9 @@ export function RequesterTicketDetail({
     );
   }
 
+  const isRequesterUser = user?.role === "REQUESTER" || !user;
+  const isTicketOwnerOrRequester = ticket.requesterId === user?.id;
+
   return (
     <div className="w-100 mb-5">
       {/* Top Header Bar with Breadcrumb and Back Button */}
@@ -268,24 +452,49 @@ export function RequesterTicketDetail({
           <ol className="breadcrumb mb-0 small">
             <li className="breadcrumb-item">
               <span className="text-success cursor-pointer fw-semibold" onClick={onBack} style={{ cursor: "pointer" }}>
-                My Tickets
+                {isStaffOrAdmin ? "IT Queue" : "My Tickets"}
               </span>
             </li>
             <li className="breadcrumb-item active text-muted" aria-current="page">
-              Ticket Details
+              Ticket {ticket.ticketNumber}
             </li>
           </ol>
         </nav>
-        <button
-          className="btn btn-outline-success btn-sm fw-semibold rounded-2 px-3"
-          onClick={onBack}
-          id="back-to-tickets-btn"
-        >
-          &larr; Back to My Tickets
-        </button>
+        <div className="d-flex gap-2">
+          {isRequesterUser && isTicketOwnerOrRequester && ticket.currentStatus !== "CLOSED" && (
+            <button
+              className="btn btn-outline-success btn-sm fw-semibold rounded-2 px-3"
+              onClick={() => setResolvingModal(true)}
+              id="problem-resolved-btn"
+            >
+              ✅ Problem Appears Resolved
+            </button>
+          )}
+          <button
+            className="btn btn-outline-secondary btn-sm fw-semibold rounded-2 px-3"
+            onClick={onBack}
+            id="back-to-tickets-btn"
+          >
+            &larr; Back
+          </button>
+        </div>
       </div>
 
-      {/* Main Ticket Read-Only Form Card (Matching Figure 1 in Handout) */}
+      {actionSuccessMsg && (
+        <div className="alert alert-success py-2 px-3 mb-3 small d-flex align-items-center gap-2" role="alert">
+          <span>✨</span>
+          <span>{actionSuccessMsg}</span>
+        </div>
+      )}
+
+      {actionErrorMsg && (
+        <div className="alert alert-danger py-2 px-3 mb-3 small d-flex align-items-center gap-2" role="alert">
+          <span>⚠️</span>
+          <span>{actionErrorMsg}</span>
+        </div>
+      )}
+
+      {/* Main Ticket Read-Only Form Card */}
       <div className="card shadow-sm border rounded-3 p-4 mb-4" style={{ backgroundColor: "#FFFFFF", borderColor: "#E5E7EB" }}>
         {/* Row 1: Ticket No, Ticket Date, Category, Related System */}
         <div className="row g-3 mb-3">
@@ -313,7 +522,7 @@ export function RequesterTicketDetail({
               type="text"
               readOnly
               className="form-control form-control-sm bg-light text-dark"
-              value={ticket.category?.name || "Hardware"}
+              value={ticket.category?.name || "General"}
             />
           </div>
           <div className="col-12 col-md-3">
@@ -322,7 +531,7 @@ export function RequesterTicketDetail({
               type="text"
               readOnly
               className="form-control form-control-sm bg-light text-dark"
-              value={ticket.relatedSystem?.name || "Corporate Laptop"}
+              value={ticket.relatedSystem?.name || "System"}
             />
           </div>
         </div>
@@ -335,7 +544,7 @@ export function RequesterTicketDetail({
               type="text"
               readOnly
               className="form-control form-control-sm bg-light text-dark"
-              value={ticket.requester?.name || `ID #${ticket.requesterId}`}
+              value={ticket.requester ? `${ticket.requester.name} (${ticket.requester.email})` : `ID #${ticket.requesterId}`}
             />
           </div>
           <div className="col-12 col-md-3">
@@ -365,8 +574,8 @@ export function RequesterTicketDetail({
             <input
               type="text"
               readOnly
-              className="form-control form-control-sm bg-light text-dark"
-              value={ticket.requester?.name ? `${ticket.requester.name} (IT Support)` : "Michael Brown (IT Support)"}
+              className="form-control form-control-sm bg-light text-dark fw-semibold"
+              value={ticket.owner ? `${ticket.owner.name}` : "Unassigned"}
             />
           </div>
           <div className="col-12 col-md-9">
@@ -381,7 +590,7 @@ export function RequesterTicketDetail({
         </div>
 
         {/* Row 4: Description */}
-        <div className="mb-3">
+        <div className="mb-0">
           <label className="form-label small fw-bold text-muted mb-1">Description</label>
           <textarea
             readOnly
@@ -390,20 +599,98 @@ export function RequesterTicketDetail({
             value={ticket.description}
           />
         </div>
-
-        {/* Row 5: Resolution Summary */}
-        <div>
-          <label className="form-label small fw-bold text-muted mb-1">Resolution Summary</label>
-          <textarea
-            readOnly
-            rows={2}
-            className="form-control form-control-sm bg-light text-muted fst-italic"
-            value="No resolution summary available yet."
-          />
-        </div>
       </div>
 
-      {/* Tabs Header (Public Comments, Attachments, Service Actions, Event Log) */}
+      {/* Staff Operational Control Panel (Only for IT Staff & Admin) */}
+      {isStaffOrAdmin && (
+        <div className="card shadow-sm border rounded-3 p-4 mb-4" style={{ backgroundColor: "#F0FDF4", borderColor: "#86EFAC" }}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="fw-bold text-success mb-0 d-flex align-items-center gap-2">
+              <span>🛠️</span> IT Staff Operational Controls
+            </h6>
+            {ticket.ownerId !== user?.id && (
+              <button
+                className="btn btn-success btn-sm fw-bold px-3"
+                onClick={handleClaimTicket}
+                disabled={updatingAction}
+                id="claim-ticket-btn"
+              >
+                🙋 Claim Ticket (Assign to Me)
+              </button>
+            )}
+          </div>
+
+          <div className="row g-3 align-items-end">
+            <div className="col-12 col-md-4">
+              <label className="form-label small fw-bold text-muted mb-1">Assignee</label>
+              <select
+                className="form-select form-select-sm"
+                value={selectedOwnerId}
+                onChange={(e) => handleAssignTicket(e.target.value)}
+                disabled={updatingAction}
+                id="reassign-select"
+              >
+                <option value="">-- Unassigned --</option>
+                {staffList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.role === "ADMINISTRATOR" ? "Admin" : "IT Staff"})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-12 col-md-3">
+              <label className="form-label small fw-bold text-muted mb-1">IT Priority</label>
+              <select
+                className="form-select form-select-sm"
+                value={selectedItPriority}
+                onChange={(e) => setSelectedItPriority(e.target.value)}
+                disabled={updatingAction}
+                id="it-priority-select"
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+                <option value="CRITICAL">Critical</option>
+              </select>
+            </div>
+
+            <div className="col-12 col-md-3">
+              <label className="form-label small fw-bold text-muted mb-1">Workflow Status</label>
+              <select
+                className="form-select form-select-sm"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                disabled={updatingAction}
+                id="status-workflow-select"
+              >
+                <option value="NEW">New</option>
+                <option value="OPEN">Open</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
+                <option value="RESOLVED">Resolved</option>
+                <option value="CLOSED">Closed</option>
+                <option value="REOPENED">Reopened</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
+
+            <div className="col-12 col-md-2">
+              <button
+                className="btn btn-outline-success btn-sm fw-bold w-100"
+                onClick={handleUpdateStatusAndPriority}
+                disabled={updatingAction}
+                id="update-status-priority-btn"
+              >
+                {updatingAction ? "Saving..." : "💾 Update"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs Header (Public Comments, Internal Notes, Attachments) */}
       <div className="card shadow-sm border rounded-3 p-4" id="attachment-section" style={{ backgroundColor: "#FFFFFF" }}>
         <ul className="nav nav-tabs mb-4 border-bottom">
           <li className="nav-item">
@@ -411,35 +698,31 @@ export function RequesterTicketDetail({
               className={`nav-link fw-semibold ${activeTab === "comments" ? "active text-success border-bottom border-success border-2 fw-bold" : "text-muted"}`}
               type="button"
               onClick={() => setActiveTab("comments")}
+              id="tab-comments"
             >
-              💬 Public Comments <span className="badge bg-success rounded-pill ms-1">3</span>
+              💬 Public Comments <span className="badge bg-success rounded-pill ms-1">{comments.length}</span>
             </button>
           </li>
+          {isStaffOrAdmin && (
+            <li className="nav-item">
+              <button
+                className={`nav-link fw-semibold ${activeTab === "notes" ? "active text-warning border-bottom border-warning border-2 fw-bold" : "text-muted"}`}
+                type="button"
+                onClick={() => setActiveTab("notes")}
+                id="tab-internal-notes"
+              >
+                🔒 Internal Notes <span className="badge bg-warning text-dark rounded-pill ms-1">{notes.length}</span>
+              </button>
+            </li>
+          )}
           <li className="nav-item">
             <button
               className={`nav-link fw-semibold ${activeTab === "attachments" ? "active text-success border-bottom border-success border-2 fw-bold" : "text-muted"}`}
               type="button"
               onClick={() => setActiveTab("attachments")}
+              id="tab-attachments"
             >
               📎 Attachments <span className="badge bg-secondary rounded-pill ms-1">{activeAttachments.length}</span>
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link fw-semibold ${activeTab === "actions" ? "active text-success border-bottom border-success border-2 fw-bold" : "text-muted"}`}
-              type="button"
-              onClick={() => setActiveTab("actions")}
-            >
-              ⚙️ Service Actions <span className="badge bg-secondary rounded-pill ms-1">1</span>
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link fw-semibold ${activeTab === "eventlog" ? "active text-success border-bottom border-success border-2 fw-bold" : "text-muted"}`}
-              type="button"
-              onClick={() => setActiveTab("eventlog")}
-            >
-              ⏱ Event Log <span className="badge bg-secondary rounded-pill ms-1">6</span>
             </button>
           </li>
         </ul>
@@ -447,313 +730,368 @@ export function RequesterTicketDetail({
         {/* Tab 1: Public Comments */}
         {activeTab === "comments" && (
           <div>
-            <div className="alert alert-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
-              <span>ℹ️</span>
-              <span><strong>Lab 2 Scope Note:</strong> Public Comments preview matching Figure 1. Interactive comment posting will be enabled in Lab 3.</span>
-            </div>
-
-            {/* Comment Form */}
-            <div className="mb-4">
-              <label className="form-label small fw-bold text-dark mb-1">Add Comment</label>
+            {/* Comment Post Form */}
+            <form onSubmit={handlePostComment} className="mb-4">
+              <label className="form-label small fw-bold text-dark mb-1">Add Public Comment</label>
               <div className="input-group">
                 <input
                   type="text"
                   className="form-control form-control-sm"
-                  placeholder="Type your comment here..."
-                  disabled
+                  placeholder="Type your public comment here (visible to Requester & IT Staff)..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  disabled={submittingComment}
+                  maxLength={2000}
+                  id="comment-input"
                 />
-                <button className="btn text-white btn-sm fw-bold px-3" style={{ backgroundColor: "#006B3C" }} disabled>
-                  🚀 Post Comment
+                <button
+                  className="btn text-white btn-sm fw-bold px-3"
+                  style={{ backgroundColor: "#006B3C" }}
+                  type="submit"
+                  disabled={!newComment.trim() || submittingComment}
+                  id="post-comment-btn"
+                >
+                  {submittingComment ? "Posting..." : "🚀 Post Comment"}
                 </button>
               </div>
-            </div>
+              {commentError && <div className="text-danger small mt-1">⚠️ {commentError}</div>}
+            </form>
 
-            {/* Sample Comments List */}
-            <div className="list-group list-group-flush border rounded">
-              <div className="list-group-item p-3">
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="badge rounded-circle bg-success p-2">JA</span>
-                    <strong className="text-dark small">Jennifer Anderson</strong>
-                    <span className="badge bg-success bg-opacity-10 text-success border border-success small">Requester</span>
-                  </div>
-                  <span className="text-muted small">May 13, 2025 11:45 AM</span>
-                </div>
-                <p className="mb-0 text-secondary small ms-4 ps-2">
-                  Thank you for the update. Please let me know if you need any additional information.
-                </p>
+            {/* Comments List */}
+            {comments.length === 0 ? (
+              <div className="text-muted small italic p-3 text-center bg-light rounded">
+                No public comments yet. Be the first to leave a message.
               </div>
-
-              <div className="list-group-item p-3">
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="badge rounded-circle bg-primary p-2">MB</span>
-                    <strong className="text-dark small">Michael Brown</strong>
-                    <span className="badge bg-primary bg-opacity-10 text-primary border border-primary small">IT Support</span>
-                  </div>
-                  <span className="text-muted small">May 13, 2025 10:30 AM</span>
-                </div>
-                <p className="mb-0 text-secondary small ms-4 ps-2">
-                  We are investigating the issue on your device. We'll update you shortly.
-                </p>
+            ) : (
+              <div className="list-group list-group-flush border rounded" id="comments-list">
+                {comments.map((c) => {
+                  const isStaff = c.author?.role === "IT_STAFF" || c.author?.role === "ADMINISTRATOR";
+                  return (
+                    <div key={c.id} className="list-group-item p-3">
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <div className="d-flex align-items-center gap-2">
+                          <span className={`badge rounded-circle ${isStaff ? "bg-primary" : "bg-success"} p-2`}>
+                            {c.author?.name ? c.author.name.slice(0, 2).toUpperCase() : "U"}
+                          </span>
+                          <strong className="text-dark small">{c.author?.name || "User"}</strong>
+                          <span
+                            className={`badge small ${
+                              isStaff
+                                ? "bg-primary bg-opacity-10 text-primary border border-primary"
+                                : "bg-success bg-opacity-10 text-success border border-success"
+                            }`}
+                          >
+                            {c.author?.role === "ADMINISTRATOR"
+                              ? "Admin"
+                              : c.author?.role === "IT_STAFF"
+                              ? "IT Staff"
+                              : "Requester"}
+                          </span>
+                        </div>
+                        <span className="text-muted small">{formatDateTime(c.createdAt)}</span>
+                      </div>
+                      <p className="mb-0 text-secondary small ms-4 ps-2 text-break">{c.content}</p>
+                    </div>
+                  );
+                })}
               </div>
-
-              <div className="list-group-item p-3">
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="badge rounded-circle bg-success p-2">JA</span>
-                    <strong className="text-dark small">Jennifer Anderson</strong>
-                    <span className="badge bg-success bg-opacity-10 text-success border border-success small">Requester</span>
-                  </div>
-                  <span className="text-muted small">May 12, 2025 09:20 AM</span>
-                </div>
-                <p className="mb-0 text-secondary small ms-4 ps-2">
-                  Just adding that this issue occurs even when I close all applications.
-                </p>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
-        {/* Tab 2: Attachments (Lab 2 Functional Scope) */}
+        {/* Tab 2: Internal Notes (Staff & Admin Only) */}
+        {activeTab === "notes" && isStaffOrAdmin && (
+          <div>
+            <div className="alert alert-warning py-2 px-3 mb-3 small d-flex align-items-center gap-2">
+              <span>🔒</span>
+              <span>
+                <strong>Confidential Operational Notes:</strong> These notes are visible ONLY to IT Staff and
+                Administrators. Requesters cannot view this tab.
+              </span>
+            </div>
+
+            {/* Note Post Form */}
+            <form onSubmit={handlePostNote} className="mb-4">
+              <label className="form-label small fw-bold text-dark mb-1">Add Private Internal Note</label>
+              <div className="input-group">
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  placeholder="Type internal troubleshooting note, vendor details, or operational updates..."
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  disabled={submittingNote}
+                  maxLength={2000}
+                  id="internal-note-input"
+                />
+                <button
+                  className="btn btn-warning text-dark btn-sm fw-bold px-3"
+                  type="submit"
+                  disabled={!newNote.trim() || submittingNote}
+                  id="post-internal-note-btn"
+                >
+                  {submittingNote ? "Saving..." : "🔒 Save Note"}
+                </button>
+              </div>
+              {noteError && <div className="text-danger small mt-1">⚠️ {noteError}</div>}
+            </form>
+
+            {/* Notes List */}
+            {notes.length === 0 ? (
+              <div className="text-muted small italic p-3 text-center bg-light rounded">
+                No internal notes added for this ticket yet.
+              </div>
+            ) : (
+              <div className="list-group list-group-flush border rounded" id="internal-notes-list">
+                {notes.map((n) => (
+                  <div key={n.id} className="list-group-item p-3" style={{ backgroundColor: "#FEFCE8" }}>
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="badge rounded-circle bg-warning text-dark p-2">🔒</span>
+                        <strong className="text-dark small">{n.author?.name || "Staff"}</strong>
+                        <span className="badge bg-warning text-dark border border-warning small">
+                          {n.author?.role === "ADMINISTRATOR" ? "Admin" : "IT Staff"}
+                        </span>
+                      </div>
+                      <span className="text-muted small">{formatDateTime(n.createdAt)}</span>
+                    </div>
+                    <p className="mb-0 text-dark small ms-4 ps-2 text-break font-monospace">{n.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: Attachments */}
         {activeTab === "attachments" && (
           <>
-
-        {/* Upload Attachment Control */}
-        <div className="bg-light p-3 rounded mb-4 border">
-          <label htmlFor="attachment-file-input" className="form-label small fw-bold text-dark mb-1">
-            Add Supporting Attachment (JPG, PNG, WEBP, PDF &le; 5MB)
-          </label>
-          <div className="input-group">
-            <input
-              type="file"
-              id="attachment-file-input"
-              className="form-control form-control-sm"
-              accept=".jpg,.jpeg,.png,.webp,.pdf"
-              onChange={handleSimulatedFileSelect}
-              disabled={activeAttachments.length >= 5 || uploading}
-            />
-            <button
-              className="btn text-white btn-sm fw-bold px-3"
-              style={{ backgroundColor: "#006B3C" }}
-              onClick={handleUploadSubmit}
-              disabled={!selectedFile || activeAttachments.length >= 5 || uploading}
-              id="upload-attachment-btn"
-            >
-              {uploading ? "Uploading..." : "Upload File"}
-            </button>
-          </div>
-          {uploadError && (
-            <div className="text-danger small mt-1" id="upload-error-msg">
-              ⚠️ {uploadError}
-            </div>
-          )}
-          {activeAttachments.length >= 5 && (
-            <div className="text-warning small mt-1" id="max-attachments-msg">
-              ℹ️ Maximum limit of 5 active attachments reached for this ticket.
-            </div>
-          )}
-        </div>
-
-        {/* Active Attachments List */}
-        <div className="mb-4">
-          <h6 className="fw-bold text-muted small text-uppercase mb-2">Active Files</h6>
-          {activeAttachments.length === 0 ? (
-            <div className="text-muted small italic p-3 text-center bg-light rounded">
-              No active attachments uploaded.
-            </div>
-          ) : (
-            <div className="list-group list-group-flush border rounded">
-              {activeAttachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="list-group-item d-flex flex-wrap justify-content-between align-items-center p-3 gap-2"
+            {/* Upload Attachment Control */}
+            <div className="bg-light p-3 rounded mb-4 border">
+              <label htmlFor="attachment-file-input" className="form-label small fw-bold text-dark mb-1">
+                Add Supporting Attachment (JPG, PNG, WEBP, PDF &le; 5MB)
+              </label>
+              <div className="input-group">
+                <input
+                  type="file"
+                  id="attachment-file-input"
+                  className="form-control form-control-sm"
+                  accept=".jpg,.jpeg,.png,.webp,.pdf"
+                  onChange={handleSimulatedFileSelect}
+                  disabled={activeAttachments.length >= 5 || uploading}
+                />
+                <button
+                  className="btn text-white btn-sm fw-bold px-3"
+                  style={{ backgroundColor: "#006B3C" }}
+                  onClick={handleUploadSubmit}
+                  disabled={!selectedFile || activeAttachments.length >= 5 || uploading}
+                  id="upload-attachment-btn"
                 >
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="fs-5">📄</span>
-                    <div>
-                      <div className="fw-bold text-dark text-break">{att.fileName}</div>
-                      <div className="text-muted small">
-                        {formatFileSize(att.fileSize)} &bull; Uploaded {new Date(att.createdAt).toLocaleDateString()}
+                  {uploading ? "Uploading..." : "Upload File"}
+                </button>
+              </div>
+              {uploadError && (
+                <div className="text-danger small mt-1" id="upload-error-msg">
+                  ⚠️ {uploadError}
+                </div>
+              )}
+              {activeAttachments.length >= 5 && (
+                <div className="text-warning small mt-1" id="max-attachments-msg">
+                  ℹ️ Maximum limit of 5 active attachments reached for this ticket.
+                </div>
+              )}
+            </div>
+
+            {/* Active Attachments List */}
+            <div className="mb-4">
+              <h6 className="fw-bold text-muted small text-uppercase mb-2">Active Files</h6>
+              {activeAttachments.length === 0 ? (
+                <div className="text-muted small italic p-3 text-center bg-light rounded">
+                  No active attachments uploaded.
+                </div>
+              ) : (
+                <div className="list-group list-group-flush border rounded">
+                  {activeAttachments.map((att) => (
+                    <div
+                      key={att.id}
+                      className="list-group-item d-flex flex-wrap justify-content-between align-items-center p-3 gap-2"
+                    >
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="fs-5">📄</span>
+                        <div>
+                          <div className="fw-bold text-dark text-break">{att.fileName}</div>
+                          <div className="text-muted small">
+                            {formatFileSize(att.fileSize)} &bull; Uploaded {new Date(att.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="d-flex gap-2">
+                        <a
+                          href={`/api/attachments/${att.id}/download`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-outline-success btn-sm fw-bold d-flex align-items-center gap-1"
+                        >
+                          📥 Download
+                        </a>
+                        <button
+                          className="btn btn-outline-danger btn-sm fw-bold"
+                          onClick={() => {
+                            setRemovingAttachment(att);
+                            setRemovalReason("");
+                            setRemovalError(null);
+                          }}
+                          id={`remove-attachment-btn-${att.id}`}
+                        >
+                          🗑️ Soft Remove
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <div className="d-flex gap-2">
-                    <a
-                      href={`/api/attachments/${att.id}/download`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-outline-success btn-sm fw-bold d-flex align-items-center gap-1"
-                    >
-                      📥 Download
-                    </a>
-                    <button
-                      className="btn btn-outline-danger btn-sm fw-bold"
-                      onClick={() => {
-                        setRemovingAttachment(att);
-                        setRemovalReason("");
-                        setRemovalError(null);
-                      }}
-                      id={`remove-attachment-btn-${att.id}`}
-                    >
-                      🗑️ Soft Remove
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Soft-Removed Attachments List */}
-        {removedAttachments.length > 0 && (
-          <div>
-            <h6 className="fw-bold text-muted small text-uppercase mb-2">Soft-Removed Files (Metadata Retained)</h6>
-            <div className="list-group list-group-flush border rounded bg-light opacity-75">
-              {removedAttachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="list-group-item d-flex flex-wrap justify-content-between align-items-center p-3 gap-2 bg-light"
-                >
-                  <div>
-                    <div className="fw-bold text-muted text-decoration-line-through">{att.fileName}</div>
-                    <div className="text-muted small">
-                      {formatFileSize(att.fileSize)} &bull; Removed on{" "}
-                      {att.removedAt ? new Date(att.removedAt).toLocaleDateString() : "-"}
-                    </div>
-                    {att.removalReason && (
-                      <div className="text-danger small mt-1">
-                        <strong>Reason:</strong> {att.removalReason}
+            {/* Removed Attachments Audit Log */}
+            {removedAttachments.length > 0 && (
+              <div>
+                <h6 className="fw-bold text-muted small text-uppercase mb-2">Audit: Soft-Removed Files</h6>
+                <div className="list-group list-group-flush border rounded bg-light">
+                  {removedAttachments.map((att) => (
+                    <div key={att.id} className="list-group-item p-3 bg-light text-muted opacity-75">
+                      <div className="d-flex justify-content-between">
+                        <span className="text-decoration-line-through fw-semibold">{att.fileName}</span>
+                        <span className="badge bg-danger">Soft Removed</span>
                       </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="badge bg-secondary">Removed (Download Blocked)</span>
-                  </div>
+                      <div className="small mt-1">
+                        <strong>Reason:</strong> {att.removalReason || "No reason given"} &bull; Removed on{" "}
+                        {att.removedAt ? new Date(att.removedAt).toLocaleDateString() : "recently"}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {/* End of Tab 2: Attachments */}
+              </div>
+            )}
           </>
-        )}
-
-        {/* Tab 3: Service Actions */}
-        {activeTab === "actions" && (
-          <div>
-            <div className="alert alert-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
-              <span>ℹ️</span>
-              <span><strong>Lab 2 Scope Note:</strong> Service Actions preview matching Figure 1. IT Staff workflow and actions will be introduced in Lab 3.</span>
-            </div>
-
-            <div className="list-group list-group-flush border rounded">
-              <div className="list-group-item p-3 d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center gap-3">
-                  <div className="d-flex align-items-center justify-content-center bg-light text-success rounded-circle" style={{ width: 40, height: 40 }}>
-                    ⚙️
-                  </div>
-                  <div>
-                    <h6 className="mb-0 text-dark fw-bold small">Diagnostic Report Requested</h6>
-                    <p className="mb-0 text-muted small">IT Staff requested hardware battery status log from Requester.</p>
-                  </div>
-                </div>
-                <span className="badge bg-secondary">Completed</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 4: Event Log */}
-        {activeTab === "eventlog" && (
-          <div>
-            <div className="alert alert-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
-              <span>ℹ️</span>
-              <span><strong>Lab 2 Scope Note:</strong> Audit trail and Event Log preview matching Figure 1. Full event tracking will be enabled in Lab 3.</span>
-            </div>
-
-            <div className="list-group list-group-flush border rounded">
-              <div className="list-group-item p-3 d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center gap-2">
-                  <span>⏱</span>
-                  <span className="small text-dark"><strong>Ticket Created:</strong> {ticket.ticketNumber} created by {ticket.requester?.name || "Requester"}</span>
-                </div>
-                <span className="text-muted small">{new Date(ticket.createdAt).toLocaleDateString()}</span>
-              </div>
-              <div className="list-group-item p-3 d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center gap-2">
-                  <span>🏷️</span>
-                  <span className="small text-dark"><strong>Priority Set:</strong> Requested Priority assigned to {ticket.requestedPriority}</span>
-                </div>
-                <span className="text-muted small">{new Date(ticket.createdAt).toLocaleDateString()}</span>
-              </div>
-              <div className="list-group-item p-3 d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center gap-2">
-                  <span>📎</span>
-                  <span className="small text-dark"><strong>Attachment Added:</strong> Supporting file uploaded to ticket</span>
-                </div>
-                <span className="text-muted small">{new Date(ticket.createdAt).toLocaleDateString()}</span>
-              </div>
-            </div>
-          </div>
         )}
       </div>
 
-      {/* Soft Remove Confirmation Modal Dialog */}
+      {/* Problem Appears Resolved Modal for Requester */}
+      {resolvingModal && (
+        <div
+          className="modal fade show d-block"
+          tabIndex={-1}
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          role="dialog"
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg rounded-3">
+              <div className="modal-header bg-success text-white">
+                <h5 className="modal-title fs-6 fw-bold">✅ Mark Problem as Appears Resolved</h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setResolvingModal(false)}
+                />
+              </div>
+              <div className="modal-body p-4">
+                <p className="small text-muted mb-3">
+                  This will notify IT Support that the issue seems resolved on your end and add a confirmation comment to
+                  the ticket.
+                </p>
+                <div className="mb-3">
+                  <label className="form-label small fw-bold">Optional Feedback / Note:</label>
+                  <textarea
+                    rows={3}
+                    className="form-control form-control-sm"
+                    placeholder="e.g. Restarting the app resolved the problem. Thank you!"
+                    value={resolveNote}
+                    onChange={(e) => setResolveNote(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer bg-light p-3">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setResolvingModal(false)}
+                  disabled={submittingResolve}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm fw-bold px-4"
+                  onClick={handleIndicateResolved}
+                  disabled={submittingResolve}
+                  id="confirm-indicate-resolved-btn"
+                >
+                  {submittingResolve ? "Submitting..." : "Send Confirmation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Soft Remove Confirmation Modal */}
       {removingAttachment && (
         <div
-          className="modal d-block bg-dark bg-opacity-50"
+          className="modal fade show d-block"
           tabIndex={-1}
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           role="dialog"
-          id="remove-attachment-modal"
         >
-          <div className="modal-dialog modal-dialog-centered" role="document">
-            <div className="card shadow-lg border-0 w-100">
-              <div className="card-header bg-danger text-white fw-bold py-3 px-4">
-                ⚠️ Confirm Attachment Soft Removal
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg rounded-3">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title fs-6 fw-bold">Confirm Attachment Soft Removal</h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setRemovingAttachment(null)}
+                />
               </div>
-              <div className="card-body p-4">
-                <p className="text-dark small mb-3">
-                  Are you sure you want to soft-remove <strong>"{removingAttachment.fileName}"</strong>?
-                  The file metadata will remain visible, but download capability will be permanently disabled.
+              <div className="modal-body p-4">
+                <p className="small text-muted mb-2">
+                  You are soft-removing: <strong>{removingAttachment.fileName}</strong>
                 </p>
-
+                <p className="small text-danger mb-3">
+                  The file will no longer be downloadable, but will remain recorded in audit logs.
+                </p>
                 <div className="mb-3">
-                  <label htmlFor="removal-reason-input" className="form-label small fw-bold text-dark">
-                    Reason for Removal <span className="text-danger">*</span>
+                  <label className="form-label small fw-bold">
+                    Mandatory Removal Reason <span className="text-danger">*</span>
                   </label>
                   <textarea
-                    id="removal-reason-input"
-                    className="form-control form-control-sm"
                     rows={3}
-                    placeholder="Enter reason for removal (3-200 characters)..."
+                    className="form-control form-control-sm"
+                    placeholder="Enter reason for removal (min 3 characters)..."
                     value={removalReason}
                     onChange={(e) => setRemovalReason(e.target.value)}
+                    id="removal-reason-input"
                   />
-                  {removalError && (
-                    <div className="text-danger small mt-1" id="modal-removal-error">
-                      ⚠️ {removalError}
-                    </div>
-                  )}
+                  {removalError && <div className="text-danger small mt-1">{removalError}</div>}
                 </div>
-
-                <div className="d-flex justify-content-end gap-2">
-                  <button
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => setRemovingAttachment(null)}
-                    disabled={removing}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm fw-bold"
-                    onClick={handleConfirmRemoval}
-                    disabled={removing || !removalReason.trim()}
-                    id="confirm-soft-remove-btn"
-                  >
-                    {removing ? "Removing..." : "Confirm Soft Removal"}
-                  </button>
-                </div>
+              </div>
+              <div className="modal-footer bg-light p-3">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setRemovingAttachment(null)}
+                  disabled={removing}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm fw-bold px-3"
+                  onClick={handleConfirmRemoval}
+                  disabled={removing || !removalReason.trim() || removalReason.trim().length < 3}
+                  id="confirm-soft-remove-btn"
+                >
+                  {removing ? "Removing..." : "Confirm Soft Removal"}
+                </button>
               </div>
             </div>
           </div>

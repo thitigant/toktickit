@@ -1,275 +1,133 @@
-# Lab 3: REST API Contract Specification
+# Lab 3 REST API Specification
 
-## Base URL
-`/api`
+## Authentication & Session Endpoints
 
-## Authentication & Authorization Architecture
-- **Session/Token Mechanism**: HTTP-only Secure Cookie or Bearer JWT token (`toktickit_auth`).
-- **Roles**: `REQUESTER`, `IT_STAFF`, `ADMINISTRATOR`.
-- **Status Codes**:
-  - `200 OK` / `201 Created` / `204 No Content`
-  - `400 Bad Request`: Validation failure or business rule violation.
-  - `401 Unauthorized`: Missing, expired, or invalid session token.
-  - `403 Forbidden`: Authenticated user lacks the required role or ownership.
-  - `404 Not Found`: Target resource does not exist (or safe masking for unauthorized access).
-  - `409 Conflict`: Unique constraint violation (e.g. email already in use).
-
----
-
-## 1. Authentication Endpoints
-
-### 1.1 Login
-- **Endpoint**: `POST /api/auth/login`
-- **Access**: Public
+### 1. `POST /api/auth/login`
+- **Description**: Authenticates user credentials and issues JWT token.
 - **Request Body**:
   ```json
   {
-    "email": "user@toktickit.com",
-    "password": "InitialPassword123!"
+    "email": "staff.alex@toktickit.com",
+    "password": "Password123!"
   }
   ```
-- **Response (200 OK)**:
+- **Response `200 OK`**:
   ```json
   {
+    "token": "eyJhbGciOi...",
     "user": {
-      "id": "usr-123456",
-      "name": "Sarah Connor",
-      "email": "user@toktickit.com",
+      "id": 1,
+      "name": "Alex Thompson",
+      "email": "staff.alex@toktickit.com",
       "role": "IT_STAFF",
       "isActive": true,
-      "mustChangePassword": true
-    },
-    "token": "jwt-or-session-token"
+      "mustChangePassword": false
+    }
   }
   ```
-- **Errors**:
-  - `400 Bad Request`: Validation error (empty email/password).
-  - `401 Unauthorized`: Invalid email or password, or account is inactive (`isActive: false`).
+- **Response `401 Unauthorized`**: Inactive account or invalid credentials.
 
-### 1.2 Get Current Authenticated User
-- **Endpoint**: `GET /api/auth/me`
-- **Access**: Authenticated users
-- **Response (200 OK)**:
-  ```json
-  {
-    "id": "usr-123456",
-    "name": "Sarah Connor",
-    "email": "user@toktickit.com",
-    "role": "IT_STAFF",
-    "isActive": true,
-    "mustChangePassword": false
-  }
-  ```
-
-### 1.3 Mandatory / Profile Password Change
-- **Endpoint**: `POST /api/auth/change-password`
-- **Access**: Authenticated users (including those with `mustChangePassword: true`)
+### 2. `POST /api/auth/change-password`
+- **Description**: Updates user password (required on first login or requested by user).
+- **Headers**: `Authorization: Bearer <token>`
 - **Request Body**:
   ```json
   {
     "currentPassword": "InitialPassword123!",
-    "newPassword": "NewSecurePassword456!",
-    "confirmPassword": "NewSecurePassword456!"
+    "newPassword": "NewSecurePassword123!"
   }
   ```
-- **Response (200 OK)**:
+- **Response `200 OK`**:
   ```json
   {
-    "message": "Password updated successfully",
-    "mustChangePassword": false
-  }
-  ```
-- **Errors**:
-  - `400 Bad Request`: Password mismatch, does not meet complexity rules, or identical to current password.
-  - `401 Unauthorized`: Current password incorrect.
-
-### 1.4 Logout
-- **Endpoint**: `POST /api/auth/logout`
-- **Access**: Authenticated users
-- **Response (200 OK)**:
-  ```json
-  {
-    "message": "Logged out successfully"
+    "message": "Password changed successfully"
   }
   ```
 
 ---
 
-## 2. IT Staff & Shared Ticket Endpoints
+## IT Staff Ticket Queue & Workflow Endpoints
 
-### 2.1 Ticket Queue (Search, Filter, Sort, Pagination)
-- **Endpoint**: `GET /api/tickets/queue`
-- **Access**: `IT_STAFF`, `ADMINISTRATOR`
-- **Query Parameters**:
-  - `search`: string (matches ticket number or summary, case-insensitive)
-  - `status`: string (enum `New`, `Open`, `In Progress`, `Waiting for Requester`, `Resolved`, `Closed`, `Reopened`, `Cancelled`)
-  - `itPriority`: string (`Low`, `Medium`, `High`, `Critical`)
-  - `assignedTo`: string (`all`, `unassigned`, `me`, or specific user ID)
-  - `sortBy`: string (`createdAt`, `updatedAt`, `itPriority`, `status` - default `createdAt`)
-  - `sortOrder`: string (`asc`, `desc` - default `desc`)
-  - `page`: integer (default `1`)
-  - `limit`: integer (default `10`)
-- **Response (200 OK)**:
+### 3. `GET /api/staff/tickets`
+- **Description**: Paginated list of tickets for IT Staff Queue with search and filters.
+- **Headers**: `Authorization: Bearer <token>` (Role: `IT_STAFF`, `ADMINISTRATOR`)
+- **Query Parameters**: `search`, `status`, `categoryCode`, `priority`, `page`, `limit`, `sortBy`, `sortOrder`
+- **Response `200 OK`**:
   ```json
   {
     "data": [
       {
-        "id": "tkt-1001",
-        "ticketNumber": "TKT-2026-0001",
-        "summary": "Cannot connect to VPN",
-        "category": "Network",
-        "requestedPriority": "High",
-        "itPriority": "High",
-        "status": "In Progress",
-        "createdAt": "2026-09-17T08:00:00.000Z",
-        "updatedAt": "2026-09-17T09:30:00.000Z",
-        "requester": {
-          "id": "usr-101",
-          "name": "Jennifer Anderson",
-          "email": "jennifer@toktickit.com"
-        },
-        "owner": {
-          "id": "usr-201",
-          "name": "Michael Brown",
-          "email": "michael@toktickit.com"
-        }
+        "id": 1,
+        "ticketNumber": "TKT-2026-00001",
+        "summary": "Laptop battery issue",
+        "status": "OPEN",
+        "requestedPriority": "MEDIUM",
+        "itPriority": "HIGH",
+        "owner": { "id": 2, "name": "Alex Thompson" }
       }
     ],
-    "pagination": {
-      "page": 1,
-      "limit": 10,
-      "totalItems": 48,
-      "totalPages": 5
-    }
+    "pagination": { "totalItems": 15, "currentPage": 1, "totalPages": 2, "pageSize": 10 }
   }
   ```
 
-### 2.2 Ticket Operational Detail (Staff / Admin view)
-- **Endpoint**: `GET /api/tickets/:id`
-- **Access**:
-  - `REQUESTER`: Only if ticket was created by current user.
-  - `IT_STAFF`, `ADMINISTRATOR`: Permitted for all tickets.
-- **Response (200 OK)**: Ticket object with Category, Related System, Owner, Comments, Attachments, and (if Staff/Admin) Internal Notes.
+### 4. `PATCH /api/tickets/:id/assign`
+- **Description**: Claim or reassign ticket ownership.
+- **Request Body**: `{ "ownerId": 2 }` (or `null` to unassign)
+- **Response `200 OK`**: Updated ticket object.
 
-### 2.3 Ticket Assignment / Claim
-- **Endpoint**: `PATCH /api/tickets/:id/assign`
-- **Access**: `IT_STAFF`, `ADMINISTRATOR`
-- **Request Body**:
-  ```json
-  {
-    "ownerId": "usr-201" // or null to unassign
-  }
-  ```
-- **Response (200 OK)**: Updated ticket details with new owner.
+### 5. `PATCH /api/tickets/:id/priority`
+- **Description**: Update IT Priority.
+- **Request Body**: `{ "itPriority": "HIGH" }`
+- **Response `200 OK`**: Updated ticket object.
 
-### 2.4 Update IT Priority & Status
-- **Endpoint**: `PATCH /api/tickets/:id/status`
-- **Access**: `IT_STAFF`, `ADMINISTRATOR`
-- **Request Body**:
-  ```json
-  {
-    "status": "In Progress",
-    "itPriority": "High"
-  }
-  ```
-- **Response (200 OK)**: Updated ticket details.
-- **Errors**:
-  - `400 Bad Request`: Disallowed status transition (violates BR-07 transition matrix).
-
-### 2.5 Requester Problem Appears Resolved Action
-- **Endpoint**: `POST /api/tickets/:id/resolve-indication`
-- **Access**: `REQUESTER` (own tickets only)
-- **Request Body**:
-  ```json
-  {
-    "note": "The issue seems fixed now, thank you!"
-  }
-  ```
-- **Response (200 OK)**: Appends a public resolution comment without changing status to Resolved/Closed.
+### 6. `PATCH /api/tickets/:id/status`
+- **Description**: Transition ticket status according to business workflow rules.
+- **Request Body**: `{ "status": "IN_PROGRESS" }`
+- **Response `200 OK`**: Updated ticket object.
 
 ---
 
-## 3. Comments and Notes Endpoints
+## Comments & Internal Notes Endpoints
 
-### 3.1 Public Comments
-- **Get Comments**: `GET /api/tickets/:id/comments`
-  - Access: Requester (own ticket), IT Staff, Administrator
-- **Create Comment**: `POST /api/tickets/:id/comments`
-  - Access: Requester (own ticket), IT Staff, Administrator
-  - Request Body:
-    ```json
-    {
-      "content": "Thank you for the update. Here is more information..."
-    }
-    ```
-  - Response (201 Created): Comment with `author`, `createdAt`, `content`.
+### 7. `POST /api/tickets/:id/comments`
+- **Description**: Post a Public Comment visible to Requester, IT Staff, and Admin.
+- **Request Body**: `{ "content": "We have ordered a replacement part." }`
+- **Response `201 Created`**: Created comment object.
 
-### 3.2 Internal Notes
-- **Get Internal Notes**: `GET /api/tickets/:id/notes`
-  - Access: `IT_STAFF`, `ADMINISTRATOR` (strictly forbidden for `REQUESTER` with 403)
-- **Create Internal Note**: `POST /api/tickets/:id/notes`
-  - Access: `IT_STAFF`, `ADMINISTRATOR`
-  - Request Body:
-    ```json
-    {
-      "content": "Escalated to third-party vendor. Ticket reference #99482."
-    }
-    ```
-  - Response (201 Created): Note object.
+### 8. `POST /api/tickets/:id/internal-notes`
+- **Description**: Post a private Internal Note (IT Staff & Admin only).
+- **Request Body**: `{ "content": "Diagnostic code: ERR-820." }`
+- **Response `201 Created`**: Created note object.
 
 ---
 
-## 4. Administrator User Management Endpoints
+## Administrator User Management Endpoints
 
-### 4.1 List Users
-- **Endpoint**: `GET /api/admin/users`
-- **Access**: `ADMINISTRATOR`
-- **Query Parameters**:
-  - `search`: string (matches name or email)
-  - `role`: string (`REQUESTER`, `IT_STAFF`, `ADMINISTRATOR`, `all`)
-- **Response (200 OK)**: Array of users (without password hashes).
+### 9. `GET /api/admin/users`
+- **Description**: List all users with search, role/status filtering, and pagination.
+- **Query Parameters**: `search`, `role`, `isActive`, `page`, `limit`
+- **Response `200 OK`**: Paginated users object.
 
-### 4.2 Create User
-- **Endpoint**: `POST /api/admin/users`
-- **Access**: `ADMINISTRATOR`
+### 10. `POST /api/admin/users`
+- **Description**: Create new user account.
 - **Request Body**:
   ```json
   {
-    "name": "Alex Thompson",
-    "email": "alex.thompson@toktickit.com",
-    "role": "IT_STAFF",
-    "isActive": true,
-    "initialPassword": "TempPassword123!"
+    "name": "New User",
+    "email": "new.user@toktickit.com",
+    "role": "REQUESTER",
+    "department": "Finance",
+    "initialPassword": "Password123!"
   }
   ```
-- **Response (201 Created)**: Created user object with `mustChangePassword: true`.
-- **Errors**:
-  - `400 Bad Request`: Invalid email, weak password, or invalid role.
-  - `409 Conflict`: Email already exists.
+- **Response `201 Created`**: Created user object.
 
-### 4.3 Update User & Role
-- **Endpoint**: `PATCH /api/admin/users/:id`
-- **Access**: `ADMINISTRATOR`
-- **Request Body**:
-  ```json
-  {
-    "name": "Alex Thompson",
-    "email": "alex.thompson@toktickit.com",
-    "role": "IT_STAFF",
-    "isActive": false
-  }
-  ```
-- **Response (200 OK)**: Updated user object.
-- **Errors**:
-  - `400 Bad Request`: Administrator attempting to deactivate own account (BR-11) or deactivating/changing role of the last active Administrator (BR-12).
+### 11. `PATCH /api/admin/users/:id`
+- **Description**: Update user profile, role, or active status.
+- **Request Body**: `{ "name": "Updated Name", "isActive": false }`
+- **Response `200 OK`**: Updated user object.
 
-### 4.4 Set / Reset Initial Password
-- **Endpoint**: `POST /api/admin/users/:id/reset-password`
-- **Access**: `ADMINISTRATOR`
-- **Request Body**:
-  ```json
-  {
-    "newInitialPassword": "NewTempPassword123!"
-  }
-  ```
-- **Response (200 OK)**: Success message, setting `mustChangePassword: true`.
+### 12. `POST /api/admin/users/:id/reset-password`
+- **Description**: Reset user password to a temporary password (`mustChangePassword = true`).
+- **Request Body**: `{ "newPassword": "TempPassword123!" }`
+- **Response `200 OK`**: `{ "message": "Password reset successfully..." }`

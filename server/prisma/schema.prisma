@@ -11,6 +11,37 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
+// Lab 3 — User Roles
+// ---------------------------------------------------------------------------
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMINISTRATOR
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — Authenticated Users
+// ---------------------------------------------------------------------------
+model User {
+  id                 Int            @id @default(autoincrement())
+  email              String         @unique
+  name               String
+  passwordHash       String
+  role               Role           @default(REQUESTER)
+  isActive           Boolean        @default(true)
+  mustChangePassword Boolean        @default(false)
+  department         String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relationships
+  requestedTickets   Ticket[]       @relation("TicketRequester")
+  ownedTickets       Ticket[]       @relation("TicketOwner")
+  comments           Comment[]
+  internalNotes      InternalNote[]
+}
+
+// ---------------------------------------------------------------------------
 // Lab 1 Issue 3 — IT request categories
 // ---------------------------------------------------------------------------
 model Category {
@@ -35,7 +66,7 @@ model RelatedSystem {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — Development Requester (simulated user for testing context)
+// Lab 2 — Development Requester (Preserved for compatibility/migration)
 // ---------------------------------------------------------------------------
 model RequesterUser {
   id         Int      @id @default(autoincrement())
@@ -48,29 +79,40 @@ model RequesterUser {
 }
 
 // ---------------------------------------------------------------------------
-// Lab 2 — IT Support Ticket
+// Lab 2 & 3 — IT Support Ticket
 // ---------------------------------------------------------------------------
 model Ticket {
-  id                Int          @id @default(autoincrement())
-  ticketNumber      String       @unique
+  id                Int            @id @default(autoincrement())
+  ticketNumber      String         @unique
   summary           String
   description       String
-  requestedPriority String       @default("MEDIUM")
-  itPriority        String       @default("MEDIUM")
-  currentStatus     String       @default("NEW")
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  requestedPriority String         @default("MEDIUM")
+  itPriority        String         @default("MEDIUM")
+  currentStatus     String         @default("NEW")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
+  // Lab 2 RequesterUser relation (optional/backward compatibility)
+  requesterUserId   Int?
+  requesterUser     RequesterUser? @relation(fields: [requesterUserId], references: [id])
+
+  // Lab 3 Authenticated User relations
   requesterId       Int
-  requester         RequesterUser @relation(fields: [requesterId], references: [id])
+  requester         User           @relation("TicketRequester", fields: [requesterId], references: [id])
+
+  ownerId           Int?
+  owner             User?          @relation("TicketOwner", fields: [ownerId], references: [id])
+
 
   categoryId        Int
-  category          Category      @relation(fields: [categoryId], references: [id])
+  category          Category       @relation(fields: [categoryId], references: [id])
 
   relatedSystemId   Int
-  relatedSystem     RelatedSystem @relation(fields: [relatedSystemId], references: [id])
+  relatedSystem     RelatedSystem  @relation(fields: [relatedSystemId], references: [id])
 
   attachments       Attachment[]
+  comments          Comment[]
+  internalNotes     InternalNote[]
 }
 
 // ---------------------------------------------------------------------------
@@ -89,4 +131,34 @@ model Attachment {
 
   ticketId      Int
   ticket        Ticket    @relation(fields: [ticketId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — Public Comments (Visible to Requester, Staff, Admin)
+// ---------------------------------------------------------------------------
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 — Internal Notes (Strictly visible only to Staff, Admin)
+// ---------------------------------------------------------------------------
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
 }
