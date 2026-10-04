@@ -1,0 +1,32 @@
+/* Custom CSS overrides and SVG constraints for TokTickIT UI */
+
+svg {
+  flex-shrink: 0;
+}
+
+/* Explicit SVG sizing constraints to prevent scaling overflow */
+svg.w-3\.5, svg.h-3\.5 { width: 0.875rem !important; height: 0.875rem !important; }
+svg.w-4, svg.h-4 { width: 1rem !important; height: 1rem !important; }
+svg.w-5, svg.h-5 { width: 1.25rem !important; height: 1.25rem !important; }
+svg.w-6, svg.h-6 { width: 1.5rem !important; height: 1.5rem !important; }
+svg.w-8, svg.h-8 { width: 2rem !important; height: 2rem !important; }
+svg.w-10, svg.h-10 { width: 2.5rem !important; height: 2.5rem !important; }
+svg.w-12, svg.h-12 { width: 3rem !important; height: 3rem !important; }
+
+/* Custom smooth scroll and scrollbar */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Form input focus styles */
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.2) !important;
+  border-color: #047857 !important;
+}
+
+/* Table styling fixes */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}

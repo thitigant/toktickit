@@ -338,10 +338,10 @@ export function StaffTicketQueue({
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-xs text-gray-700">
-                        {ticket.requester?.name ? (
+                        {ticket.owner?.name ? (
                           <span className="inline-flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            {ticket.requester.name}
+                            {ticket.owner.name}
                           </span>
                         ) : (
                           <span className="text-gray-400 italic">Unassigned</span>

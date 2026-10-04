@@ -34,6 +34,7 @@ describe("StaffTicketQueue Component", () => {
         updatedAt: "2026-09-10T09:00:00.000Z",
         category: { id: 1, name: "Hardware" },
         requester: { id: 2, name: "Jennifer Anderson", email: "jennifer@example.com", department: "IT Support" },
+        owner: { id: 2, name: "Jennifer Anderson", email: "jennifer@example.com", role: "IT_STAFF" },
       },
     ],
     pagination: {
@@ -76,9 +77,10 @@ describe("StaffTicketQueue Component", () => {
       expect(screen.getAllByText("TKT-2026-000201")[0]).toBeInTheDocument();
     });
 
-
-    expect(screen.getAllByText("VPN connectivity drops repeatedly")[0]).toBeInTheDocument();
-    expect(screen.getByText("Jennifer Anderson")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("VPN connectivity drops repeatedly")[0]).toBeInTheDocument();
+      expect(screen.getAllByText("Jennifer Anderson")[0]).toBeInTheDocument();
+    });
   });
 
 });
