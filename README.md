@@ -1,6 +1,16 @@
-# TokTickIT — Requester Ticketing MVP with UI Foundation (Lab 2)
+# TokTickIT — IT Service Desk Portal (Lab 3)
 
 TokTickIT is an IT service desk web application built with React, TypeScript, Express, Prisma, PostgreSQL, and Zen Green design system.
+
+## What's New in Lab 3
+
+- 🔐 **JWT Authentication** — Email/Password login with bcrypt hashing and mandatory first-login password change
+- 🎭 **Role-Based Authorization (RBAC)** — Requester, IT Staff, and Administrator roles with full access control
+- 🎫 **IT Staff Ticket Queue** — Searchable, filterable, paginated ticket queue with Claim/Assign, IT Priority, and Status Transition workflow
+- 💬 **Public Comments & Internal Notes** — Role-restricted communication on each ticket
+- 🛡️ **Admin User Management** — Create, edit, reset passwords with Safety Rules (no self-deactivation, last-admin protection)
+
+---
 
 ## Repository Structure
 
@@ -8,34 +18,41 @@ TokTickIT is an IT service desk web application built with React, TypeScript, Ex
 toktickit/
 ├── client/                      # React + TypeScript + Vite frontend
 │   ├── src/
-│   │   ├── components/          # CreateTicketForm, MyTicketsList, RequesterTicketDetail
-│   │   ├── api.ts               # REST API client
-│   │   └── App.tsx              # App Shell & Requester Context Selector
+│   │   ├── components/          # Lab 2: CreateTicketForm, MyTicketsList, RequesterTicketDetail
+│   │   │                        # Lab 3: LoginScreen, ChangePasswordScreen,
+│   │   │                        #         StaffTicketQueue, UserManagement
+│   │   ├── api.ts               # REST API client (with JWT Bearer Token support)
+│   │   └── App.tsx              # App Shell with Role-Based Navigation
 │   └── tests/
-│       ├── lab-01/
-│       └── lab-02/              # MyTicketsList, RequesterTicketDetail, CreateTicket, AttachmentSection tests
+│       ├── lab-02/              # MyTicketsList, CreateTicket, AttachmentSection tests
+│       └── lab-03/              # StaffTicketQueue UI component tests
 ├── server/                      # Express + TypeScript + Prisma backend
 │   ├── prisma/                  # Schema, migrations, seed script
+│   │   └── seed.ts              # Seeds 10 users (Requester/IT Staff/Admin) + sample tickets
 │   ├── src/                     # Express app routes & controllers
+│   │   ├── middleware/          # JWT auth middleware, Role authorization guard
+│   │   └── routes/              # auth, staff, tickets, admin routes
 │   └── tests/
-│       ├── lab-01/
-│       └── lab-02/              # API & unit tests (tickets, my-tickets, ticket-detail, attachments)
-├── docs/                        # Engineering contract & lab specifications
-│   ├── lab-01/
-│   └── lab-02/                  # specification.md, tests.md, ui-spec.md, api-spec.md, reviewer.md, ai-use.md
+│       ├── lab-02/              # API & unit tests (tickets, my-tickets, attachments)
+│       └── lab-03/              # auth, staff-queue, tickets-operations, admin-user-management
+├── docs/
+│   ├── lab-02/                  # Lab 2 engineering contracts
+│   └── lab-03/                  # specification.md, api-spec.md, ui-spec.md,
+│                                #  tests.md, reviewer.md, ai-use.md
 ├── e2e/
-│   └── lab-02/                  # requester-ticket-flow.spec.ts
-├── artifacts/
-│   └── lab-02/screenshots/      # create-ticket, my-tickets, ticket-detail screenshots
+│   ├── lab-02/                  # requester-ticket-flow.spec.ts
+│   └── lab-03/                  # staff-ticket-flow.spec.ts
 ├── .gitignore
 └── README.md
 ```
+
+---
 
 ## Setup Instructions
 
 ### Prerequisites
 - Node.js (v18+)
-- PostgreSQL database server running locally
+- Docker (for PostgreSQL) or PostgreSQL server running locally
 
 ### 1. Server Setup
 1. Navigate to the `server` directory:
@@ -50,12 +67,12 @@ toktickit/
    ```bash
    cp .env.example .env
    ```
-   *(Update `DATABASE_URL` in `.env` if your PostgreSQL setup requires different credentials)*
+   *(Update `DATABASE_URL` and `JWT_SECRET` in `.env` as needed)*
 
 4. Run Prisma database migrations & seed:
    ```bash
-   npm run prisma:migrate
-   npm run prisma:seed
+   npx prisma db push
+   npx prisma db seed
    ```
 
 5. Start the backend dev server:
@@ -79,7 +96,24 @@ toktickit/
    ```
    Frontend runs at `http://localhost:5173`.
 
-### 3. Running Automated Tests
+---
+
+## Default Login Credentials (After Seed)
+
+| Role | Email | Password | หมายเหตุ |
+|---|---|---|---|
+| **Administrator** | `admin@toktickit.com` | `Password123!` | Active |
+| **IT Staff** | `staff.alex@toktickit.com` | `Password123!` | Active |
+| **IT Staff** | `staff.bob@toktickit.com` | `Password123!` | Active |
+| **Requester** | `requester.jennifer@toktickit.com` | `Password123!` | Active |
+| **Requester** | `requester.michael@toktickit.com` | `Password123!` | Active |
+| **Requester** | `requester.sarah@toktickit.com` | `Password123!` | Active |
+| **Requester** | `requester.david@toktickit.com` | `InitialPassword123!` | ⚠️ ต้องเปลี่ยน Password แรกเข้า |
+
+---
+
+## Running Automated Tests
+
 - **Backend API & Unit Tests (Vitest + Supertest):**
   ```bash
   cd server && npm test
@@ -88,7 +122,11 @@ toktickit/
   ```bash
   cd client && npm test
   ```
-- **End-to-End Tests (Playwright):**
+- **E2E Tests — Lab 2 (Playwright):**
   ```bash
   npx playwright test e2e/lab-02/
+  ```
+- **E2E Tests — Lab 3 (Playwright):**
+  ```bash
+  npx playwright test e2e/lab-03/
   ```
