@@ -1,49 +1,49 @@
 # Lab 4 AI Use & Reflection — TokTickIT Sprint 4
 
 ## LLM Models Used
-- **Specification & Coding Agent**: Gemini 3.8 Flash / Antigravity AI Agentic Assistant.
+- **Specification & Coding Agent**: Google Antigravity AI Agentic Assistant.
 
 ---
 
-## Key Selected Prompts (Planned 6–10 Prompts)
+## Key Selected Prompts (8 Prompts)
 
 1. **Prompt 1 (Handout Analysis & Sprint 4 Roadmap):**
    > "ช่วยอ่านไฟล์แลป 4 และอธิบายหน่อยว่าแลปนี้ต้องทำอะไรบ้าง"
-   - *Purpose*: วิเคราะห์เอกสารข้อกำหนด Lab 4 อย่างละเอียด สรุปขอบเขตงาน (Actions Taken, Ticket Workflow, Dashboards, Final Regression) และข้อกำหนดคะแนน 9 ส่วน (60 คะแนน).
+   - *Outcome*: Analyzed the Lab 4 handout thoroughly, summarizing the core product increment (Actions Taken, Authoritative Ticket Workflow, Role Dashboards, and Final Regression) and the 9-part grading rubric (60 points).
 
 2. **Prompt 2 (Git Branch Flow & Staging Setup):**
    > "ขั้นตอนแรกต้องทำอะไร และช่วยทำขั้นตอนที่ 1 ให้เลยได้ไหม"
-   - *Purpose*: เตรียมความพร้อม Git repository, จัดการ commit งานเก่าของ Lab 3, สร้าง `lab4-staging` แตกออกจาก `main` และเปิด feature branch `feature/lab4-specs`.
+   - *Outcome*: Established the `lab4-staging` integration branch from `main`, decomposed Sprint 4 into 6 GitHub Issues (#37–#42), and created the initial feature branch `feature/lab4-specs`.
 
 3. **Prompt 3 (Spec DD — Engineering Contract Generation):**
    > "สร้างเอกสารสเปก docs/lab-04/ ได้แก่ specification.md, api-spec.md, ui-spec.md, tests.md, reviewer.md, ai-use.md ให้ครบถ้วนตามข้อกำหนด Lab 4"
-   - *Purpose*: กำหนด Functional Requirements (FR-01 to FR-13), Business Rules (BR-01 to BR-10), Status Transition Matrix, Database Schema Justifications, และ Acceptance Criteria (AC-01 to AC-12).
+   - *Outcome*: Authored the complete Sprint 4 engineering contract including Functional Requirements (`FR-01` to `FR-13`), Business Rules (`BR-01` to `BR-10`), Status Transition Matrix, Database Schema Justifications, and Acceptance Criteria (`AC-01` to `AC-12`).
 
-4. **Prompt 4 (Database Schema & Actions Taken Model):**
-   > *(Planned)* "อัปเดต Prisma schema เพิ่มโมเดล ActionTaken พร้อม Relation, Foreign keys, และ Indexes ตามสเปก พร้อมเขียน Idempotent seed data"
-   - *Purpose*: สร้าง Parent-child work structure และเตรียมข้อมูลทดสอบที่มี 0, 1, และหลาย Actions Taken.
+4. **Prompt 4 (Database Schema, Seed Data & Actions Taken REST API — Issue #38):**
+   > "เริ่มทำ issue 2 ต่อได้เลย (ActionTaken model, migration, seed, and REST API)"
+   - *Outcome*: Added the `ActionTaken` model to Prisma with foreign keys and composite indexes, created idempotent Sprint 4 seed data covering tickets with 0, 1, and multiple actions, and implemented `GET/POST/PATCH /api/tickets/:id/actions-taken` with `actions-taken.api.test.ts`.
 
-5. **Prompt 5 (Actions Taken & Dashboard REST APIs):**
-   > *(Planned)* "สร้าง REST API endpoints สำหรับ Actions Taken (/api/tickets/:id/actions-taken) และ Dashboards (/api/dashboards/staff, /api/dashboards/requester) พร้อมการ Validate และ Concurrency conflict check"
-   - *Purpose*: พัฒนา Backend routes, controllers, middleware, และ test suites.
+5. **Prompt 5 (Actions Taken UI Panel — Issue #39):**
+   > "เพื่อนรีวิวและ merge issue 2 ให้เรียบร้อยแล้ว ต่อไปเริ่มทำ issue 3 ต่อได้เลย"
+   - *Outcome*: Built `ActionsTakenPanel.tsx` integrated into `TicketDetail.tsx` supporting read-only Requester view, IT Staff/Admin create & edit forms, conditional `followUpNote` validation, and `ActionsTaken.test.tsx`.
 
-6. **Prompt 6 (Zen Green UI Components & Dashboards):**
-   > *(Planned)* "สร้าง React UI สำหรับ IT Staff Dashboard, Requester Dashboard และส่วน Actions Taken ใน Ticket Detail ตาม Zen Green design language และ Accessibility standards"
-   - *Purpose*: สร้าง Metric cards, Drill-down navigation, และ Create/Edit Action Taken modal/inline form.
+6. **Prompt 6 (Authoritative Ticket Workflow, Resolution Gate & Concurrency — Issue #40):**
+   > "เพื่อนรีวิวและ merge issue 3 ให้เรียบร้อยแล้ว ต่อไปทำ issue 4 ได้เลย"
+   - *Outcome*: Implemented `PATCH /api/tickets/:id/status` enforcing the Permitted Status Transition Matrix and Resolution Gate (`RESOLVED`/`CLOSED` restricted to IT Staff/Admin), added `POST /api/tickets/:id/resolve-advisory` for Requesters, and enforced optimistic concurrency via `expectedUpdatedAt` returning `409 Conflict`, verified by `ticket-workflow.api.test.ts` and `TicketWorkflow.test.tsx`.
 
-7. **Prompt 7 (Ticket Workflow & Stale Update Protection):**
-   > *(Planned)* "เชื่อมโยง Ticket status transitions ให้ตรงตาม Matrix และจัดการ HTTP 409 Conflict เมื่อมีการแก้ไขชนกัน"
-   - *Purpose*: บังคับใช้ Resolution Gate และความถูกต้องของสถานะ Ticket.
+7. **Prompt 7 (Role-Appropriate Operational Dashboards — Issue #41):**
+   > "เพื่อนรีวิวกับ merge issue 4 ให้แล้ว ต่อไปเริ่มทำ pull request issue 5 ได้เลยใช่ไหม"
+   - *Outcome*: Implemented `GET /api/dashboards/requester` and `GET /api/dashboards/staff`, built `RequesterDashboard.tsx` and `StaffDashboard.tsx` with 1-click drill-down navigation into filtered ticket queues, and verified with API and UI test suites.
 
-8. **Prompt 8 (Comprehensive Regression & E2E Testing):**
-   > *(Planned)* "รันการทดสอบ Unit, API, UI และสร้าง Playwright E2E tests สำหรับ Sprint 4 พร้อมตรวจสอบว่าการทำงานของ Lab 1–3 ไม่พัง"
-   - *Purpose*: ป้องกันข้อผิดพลาดแบบ Regression และเตรียมหลักฐานการทดสอบทั้งหมด 100%.
+8. **Prompt 8 (Final Hardening, E2E Suites & Regression Verification — Issue #42):**
+   > "เพื่อนรีวิวกับ merge issue 5 ให้แล้ว ต่อไปเริ่มทำ pull request issue 6 issue สุดท้ายได้เลยใช่ไหม"
+   - *Outcome*: Created Playwright E2E test suites (`actions-taken-flow.spec.ts`, `ticket-resolution.spec.ts`, `dashboards.spec.ts`), hardened test data setup so all 16 server test files (93 tests) and 11 client test files (30 tests) pass sequentially, and updated `README.md` and `docs/lab-04/` documentation.
 
 ---
 
 ## My Reflection
 
-การนำ AI Agent (Antigravity with Gemini 3.8 Flash) มาประยุกต์ใช้ใน Sprint 4 นี้:
-- **Specification-Agent Capabilities**: การให้ AI ช่วยวิเคราะห์ Handout และสังเคราะห์ออกมาเป็น Engineering Contract (`specification.md`, `api-spec.md`, `ui-spec.md`, `tests.md`) ช่วยประหยัดเวลาอย่างมหาศาล และทำให้แน่ใจว่าเงื่อนไขที่ซับซ้อน เช่น Parent-child relations, State Transition Matrix, Concurrency handling และ Dashboard aggregations ถูกนิยามไว้อย่างชัดเจน รัดกุม ครบถ้วนก่อนเขียนโค้ดจริง
-- **Traceability & Rigor**: AI ช่วยสร้างตาราง Traceability Matrix ที่เชื่อมโยงระหว่าง Acceptance Criteria (AC) ไปยัง Automated Test File แต่ละไฟล์โดยตรง ทำให้กระบวนการพัฒนาเป็นไปตามหลัก Test-Driven Development (TDD) อย่างแท้จริง
-- **Consistency**: การอ้างอิง Design Tokens จาก Lab 2 และ 3 ทำให้ UI ใหม่ในแลปนี้ยังคงเอกลักษณ์ของ Zen Green Design System ได้อย่างกลมกลืน ไร้รอยต่อ
+Applying an AI Agent across Sprint 4 (Lab 4) demonstrated how Spec-Driven Development (Spec DD) and Test-Driven Development (TDD) keep a complex multi-sprint full-stack application coherent:
+- **Specification-Agent Value**: Defining the Permitted Status Transition Matrix, Resolution Gate rules, optimistic concurrency contract (`409 Conflict`), and dashboard aggregation queries in `docs/lab-04/` before writing code prevented ambiguity between frontend and backend implementations.
+- **Coding-Agent & TDD Rigor**: Mapping every Acceptance Criterion (`AC-01` through `AC-12`) to automated Vitest API tests, React Testing Library component tests, and Playwright E2E tests allowed us to catch subtle issues early (such as sequential database state isolation in integration tests) while guaranteeing zero regressions across Labs 1, 2, and 3.
+- **Design & Architectural Consistency**: Reusing the Zen Green design tokens and existing authentication/RBAC middlewares enabled the new `ActionsTakenPanel`, `RequesterDashboard`, and `StaffDashboard` views to integrate seamlessly into the TokTickIT service desk.
