@@ -897,3 +897,90 @@ export async function resetUserPassword(userId: number, newPassword: string, tok
   }
   return res.json();
 }
+
+// ─── Dashboards ───
+
+export interface RequesterDashboardMetrics {
+  totalOpenTickets: number;
+  inProgressTickets: number;
+  waitingForRequesterTickets: number;
+  resolvedTickets: number;
+  closedTickets: number;
+}
+
+export interface RequesterRecentTicket {
+  id: number;
+  ticketNumber: string;
+  title: string;
+  status: string;
+  priority: string;
+  categoryName: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface RequesterDashboardData {
+  metrics: RequesterDashboardMetrics;
+  recentTickets: RequesterRecentTicket[];
+}
+
+export interface StaffDashboardMetrics {
+  newCount: number;
+  openCount: number;
+  inProgressCount: number;
+  waitingForRequesterCount: number;
+  myAssignedCount: number;
+  unassignedCount: number;
+  highPriorityCount: number;
+  criticalPriorityCount: number;
+}
+
+export interface StaffRecentTicket {
+  id: number;
+  ticketNumber: string;
+  title: string;
+  status: string;
+  itPriority: string;
+  categoryName: string;
+  requesterName: string;
+  assignedStaffName: string;
+  updatedAt: string;
+}
+
+export interface UserSummary {
+  totalUsers: number;
+  activeStaff: number;
+  activeRequesters: number;
+}
+
+export interface StaffDashboardData {
+  metrics: StaffDashboardMetrics;
+  recentTickets: StaffRecentTicket[];
+  userSummary?: UserSummary;
+}
+
+export async function getRequesterDashboard(token?: string): Promise<RequesterDashboardData> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/dashboards/requester`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to fetch requester dashboard");
+  }
+  return res.json();
+}
+
+export async function getStaffDashboard(token?: string): Promise<StaffDashboardData> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/dashboards/staff`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to fetch staff dashboard");
+  }
+  return res.json();
+}

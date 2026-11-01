@@ -1848,4 +1848,186 @@ app.patch(
   }
 );
 
+// ---------------------------------------------------------------------------
+// GET /api/dashboards/requester
+// ---------------------------------------------------------------------------
+app.get("/api/dashboards/requester", authenticate, async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const userId = req.user!.id;
+
+    // totalOpenTickets: NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, REOPENED
+    const [
+      totalOpenTickets,
+      inProgressTickets,
+      waitingForRequesterTickets,
+      resolvedTickets,
+      closedTickets,
+      recentTicketsRaw,
+    ] = await Promise.all([
+      prisma.ticket.count({
+        where: {
+          requesterId: userId,
+          currentStatus: { in: ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"] },
+        },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "IN_PROGRESS" },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "WAITING_FOR_REQUESTER" },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "RESOLVED" },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "CLOSED" },
+      }),
+      prisma.ticket.findMany({
+        where: { requesterId: userId },
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+        include: {
+          category: true,
+        },
+      }),
+    ]);
+
+    const recentTickets = recentTicketsRaw.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      title: t.summary,
+      status: t.currentStatus,
+      priority: t.requestedPriority,
+      categoryName: t.category?.name || "General",
+      updatedAt: t.updatedAt.toISOString(),
+      createdAt: t.createdAt.toISOString(),
+    }));
+
+    return res.status(200).json({
+      metrics: {
+        totalOpenTickets,
+        inProgressTickets,
+        waitingForRequesterTickets,
+        resolvedTickets,
+        closedTickets,
+      },
+      recentTickets,
+    });
+  } catch (err: any) {
+    console.error("Failed to fetch requester dashboard:", err);
+    return res.status(500).json({ error: "Failed to fetch requester dashboard metrics" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/dashboards/staff
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/dashboards/staff",
+  authenticate,
+  requireRoles(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const prisma = getPrisma();
+      const userId = req.user!.id;
+      const isAdmin = req.user!.role === Role.ADMINISTRATOR;
+
+      const [
+        newCount,
+        openCount,
+        inProgressCount,
+        waitingForRequesterCount,
+        myAssignedCount,
+        unassignedCount,
+        highPriorityCount,
+        criticalPriorityCount,
+        recentTicketsRaw,
+      ] = await Promise.all([
+        prisma.ticket.count({ where: { currentStatus: "NEW" } }),
+        prisma.ticket.count({ where: { currentStatus: "OPEN" } }),
+        prisma.ticket.count({ where: { currentStatus: "IN_PROGRESS" } }),
+        prisma.ticket.count({ where: { currentStatus: "WAITING_FOR_REQUESTER" } }),
+        prisma.ticket.count({
+          where: {
+            ownerId: userId,
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            ownerId: null,
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            itPriority: "HIGH",
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            itPriority: { in: ["CRITICAL", "URGENT"] },
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.findMany({
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          include: {
+            category: true,
+            requester: true,
+            owner: true,
+          },
+        }),
+      ]);
+
+      let userSummary: any = undefined;
+      if (isAdmin) {
+        const [totalUsers, activeStaff, activeRequesters] = await Promise.all([
+          prisma.user.count(),
+          prisma.user.count({ where: { role: { in: [Role.IT_STAFF, Role.ADMINISTRATOR] }, isActive: true } }),
+          prisma.user.count({ where: { role: Role.REQUESTER, isActive: true } }),
+        ]);
+        userSummary = {
+          totalUsers,
+          activeStaff,
+          activeRequesters,
+        };
+      }
+
+      const recentTickets = recentTicketsRaw.map((t) => ({
+        id: t.id,
+        ticketNumber: t.ticketNumber,
+        title: t.summary,
+        status: t.currentStatus,
+        itPriority: t.itPriority,
+        categoryName: t.category?.name || "General",
+        requesterName: t.requester?.name || "Unknown",
+        assignedStaffName: t.owner?.name || "Unassigned",
+        updatedAt: t.updatedAt.toISOString(),
+      }));
+
+      return res.status(200).json({
+        metrics: {
+          newCount,
+          openCount,
+          inProgressCount,
+          waitingForRequesterCount,
+          myAssignedCount,
+          unassignedCount,
+          highPriorityCount,
+          criticalPriorityCount,
+        },
+        recentTickets,
+        ...(userSummary ? { userSummary } : {}),
+      });
+    } catch (err: any) {
+      console.error("Failed to fetch staff dashboard:", err);
+      return res.status(500).json({ error: "Failed to fetch staff dashboard metrics" });
+    }
+  }
+);
+
 export default app;
