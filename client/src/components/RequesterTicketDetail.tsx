@@ -18,6 +18,7 @@ import {
   StaffUser,
 } from "../api";
 import { AuthUser } from "../auth";
+import { ActionsTaken } from "./ActionsTaken";
 
 interface RequesterTicketDetailProps {
   ticketId: number;
@@ -725,7 +726,26 @@ export function RequesterTicketDetail({
               📎 Attachments <span className="badge bg-secondary rounded-pill ms-1">{activeAttachments.length}</span>
             </button>
           </li>
+          <li className="nav-item">
+            <button
+              className={`nav-link fw-semibold ${activeTab === "actions" ? "active text-success border-bottom border-success border-2 fw-bold" : "text-muted"}`}
+              type="button"
+              onClick={() => setActiveTab("actions")}
+              id="tab-actions-taken"
+            >
+              📋 Actions Taken
+            </button>
+          </li>
         </ul>
+
+        {/* Tab 4: Actions Taken */}
+        {activeTab === "actions" && (
+          <ActionsTaken
+            ticketId={ticketId}
+            isStaffOrAdmin={isStaffOrAdmin}
+            formatDateTime={formatDateTime}
+          />
+        )}
 
         {/* Tab 1: Public Comments */}
         {activeTab === "comments" && (
