@@ -637,7 +637,7 @@ export async function assignTicket(ticketId: number, ownerId: number | null, tok
 
 export async function updateTicketStatus(
   ticketId: number,
-  payload: { status?: string; itPriority?: string },
+  payload: { status?: string; itPriority?: string; expectedUpdatedAt?: string },
   token?: string
 ): Promise<TicketDetail> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -651,6 +651,9 @@ export async function updateTicketStatus(
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      throw new Error(data.error || "Conflict: Ticket has been modified concurrently by another user");
+    }
     throw new Error(data.error || "Failed to update status/priority");
   }
   return res.json();

@@ -202,6 +202,7 @@ export function RequesterTicketDetail({
       const updated = await updateTicketStatus(ticketId, {
         status: selectedStatus,
         itPriority: selectedItPriority,
+        expectedUpdatedAt: ticket?.updatedAt,
       });
       setTicket(updated);
       setActionSuccessMsg("Status and IT Priority updated successfully!");
