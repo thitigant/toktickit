@@ -36,16 +36,19 @@ export function AppShell({ user, onLogout, children, activeView, onNavigate }: A
   const navLinks: { id: string; label: string; view: string; icon: string }[] = [];
   if (user.role === "REQUESTER") {
     navLinks.push(
+      { id: "nav-dashboard", label: "Dashboard", view: "dashboard", icon: "📊" },
       { id: "nav-my-tickets", label: "My Tickets", view: "my-tickets", icon: "📋" },
       { id: "nav-create-ticket", label: "Create Ticket", view: "create-ticket", icon: "➕" }
     );
   } else if (user.role === "IT_STAFF") {
     navLinks.push(
+      { id: "nav-dashboard", label: "Dashboard", view: "dashboard", icon: "📊" },
       { id: "nav-queue", label: "Ticket Queue", view: "queue", icon: "🗂️" },
       { id: "nav-create-ticket", label: "Create Ticket", view: "create-ticket", icon: "➕" }
     );
   } else if (user.role === "ADMINISTRATOR") {
     navLinks.push(
+      { id: "nav-dashboard", label: "Dashboard", view: "dashboard", icon: "📊" },
       { id: "nav-queue", label: "Ticket Queue", view: "queue", icon: "🗂️" },
       { id: "nav-user-management", label: "User Management", view: "user-management", icon: "👥" }
     );

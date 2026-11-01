@@ -11,19 +11,23 @@ interface StaffTicketQueueProps {
   categories: Category[];
   onSelectTicket?: (ticketId: number) => void;
   currentUser?: { id: number; name: string; role: string };
+  initialStatus?: string;
+  initialOwner?: string;
 }
 
 export function StaffTicketQueue({
   categories,
   onSelectTicket,
   currentUser,
+  initialStatus,
+  initialOwner,
 }: StaffTicketQueueProps) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedRequestedPriority, setSelectedRequestedPriority] = useState<string>("");
   const [selectedItPriority, setSelectedItPriority] = useState<string>("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
-  const [selectedOwner, setSelectedOwner] = useState<string>("ALL");
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus || "");
+  const [selectedOwner, setSelectedOwner] = useState<string>(initialOwner || "ALL");
   const [page, setPage] = useState<number>(1);
   const [pageSize] = useState<number>(10);
 

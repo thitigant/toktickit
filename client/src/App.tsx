@@ -15,6 +15,7 @@ import { StaffDashboard } from "./components/StaffDashboard";
 type AppView =
   | "login"
   | "change-password"
+  | "dashboard"
   | "my-tickets"
   | "create-ticket"
   | "ticket-detail"
@@ -47,12 +48,8 @@ export default function App() {
       setView("change-password");
       return;
     }
-    // Default view by role
-    if (user.role === "REQUESTER") {
-      setView("my-tickets");
-    } else if (user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") {
-      setView("queue");
-    }
+    // Default landing view: role dashboard
+    setView("dashboard");
   }, [user]);
 
   // Load categories once logged in
@@ -79,6 +76,10 @@ export default function App() {
   function handleNavigate(targetView: string) {
     if (targetView !== "my-tickets" && targetView !== "ticket-detail") {
       setSelectedTicketId(null);
+    }
+    if (targetView === "my-tickets" || targetView === "queue") {
+      setDrillDownStatus("");
+      setDrillDownOwner("");
     }
     setView(targetView as AppView);
   }
@@ -192,9 +193,40 @@ export default function App() {
           />
         )}
 
+        {/* Dashboards */}
+        {view === "dashboard" && user.role === "REQUESTER" && (
+          <RequesterDashboard
+            onDrillDown={(filter) => {
+              setDrillDownStatus(filter.status || "");
+              setView("my-tickets");
+            }}
+            onCreateTicketClick={() => setView("create-ticket")}
+            onSelectTicket={(id) => {
+              setSelectedTicketId(id);
+              setView("ticket-detail");
+            }}
+          />
+        )}
+        {view === "dashboard" && (user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") && (
+          <StaffDashboard
+            currentUser={{ id: user.id, name: user.name, role: user.role }}
+            onDrillDown={(filter) => {
+              setDrillDownStatus(filter.status || "");
+              setDrillDownOwner(filter.ownerId ? "me" : "");
+              setView("queue");
+            }}
+            onSelectTicket={(id) => {
+              setSelectedTicketId(id);
+              setView("ticket-detail");
+            }}
+          />
+        )}
+
         {/* Requester Views */}
         {user.role === "REQUESTER" && view === "my-tickets" && (
           <MyTicketsList
+            key={`mt-${drillDownStatus}`}
+            initialStatus={drillDownStatus}
             requesterId={user.id}
             categories={categories}
             onCreateTicketClick={() => setView("create-ticket")}
@@ -222,6 +254,9 @@ export default function App() {
         {/* IT Staff / Admin Views */}
         {(user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") && view === "queue" && (
           <StaffTicketQueue
+            key={`q-${drillDownStatus}-${drillDownOwner}`}
+            initialStatus={drillDownStatus}
+            initialOwner={drillDownOwner}
             categories={categories}
             currentUser={{ id: user.id, name: user.name, role: user.role }}
             onSelectTicket={(id) => {

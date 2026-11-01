@@ -11,6 +11,7 @@ interface MyTicketsListProps {
   categories: Category[];
   onCreateTicketClick: () => void;
   onSelectTicket?: (ticketId: number) => void;
+  initialStatus?: string;
 }
 
 export function MyTicketsList({
