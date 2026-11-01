@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Starting Lab 3 seed...");
+  console.log("Starting Lab 4 idempotent seed...");
 
   // --- Seed Categories ---
   const categories = [
@@ -21,7 +21,7 @@ async function main() {
       create: { name: cat.name, code: cat.code },
     });
   }
-  console.log("Seeded 4 categories.");
+  console.log("Seeded categories.");
 
   // --- Seed Related Systems ---
   const relatedSystems = [
@@ -41,7 +41,7 @@ async function main() {
       create: { name: sys.name, code: sys.code },
     });
   }
-  console.log("Seeded 7 related systems.");
+  console.log("Seeded related systems.");
 
   // --- Hash default passwords ---
   const salt = await bcrypt.genSalt(10);
@@ -50,7 +50,7 @@ async function main() {
 
   // --- Seed Users (Requesters, IT Staff, Administrator) ---
   const seedUsers = [
-    // Requesters (4 active, 1 inactive)
+    // Requesters
     {
       email: "requester.jennifer@toktickit.com",
       name: "Jennifer Anderson",
@@ -83,7 +83,7 @@ async function main() {
       name: "David Lee",
       role: Role.REQUESTER,
       isActive: true,
-      mustChangePassword: true, // Needs password change on first login
+      mustChangePassword: true,
       department: "HR",
       passwordHash: initialPasswordHash,
     },
@@ -97,33 +97,33 @@ async function main() {
       passwordHash: defaultPasswordHash,
     },
 
-    // IT Staff (3 active, 1 inactive)
+    // IT Staff
     {
       email: "staff.alex@toktickit.com",
-      name: "Alex Thompson (IT Support)",
+      name: "Alex Thompson",
       role: Role.IT_STAFF,
       isActive: true,
       mustChangePassword: false,
-      department: "IT Services",
+      department: "IT Infrastructure",
       passwordHash: defaultPasswordHash,
     },
     {
       email: "staff.bob@toktickit.com",
-      name: "Bob Miller (IT Support)",
+      name: "Bob Martinez",
       role: Role.IT_STAFF,
       isActive: true,
       mustChangePassword: false,
-      department: "IT Services",
+      department: "IT Helpdesk",
       passwordHash: defaultPasswordHash,
     },
     {
       email: "staff.clara@toktickit.com",
-      name: "Clara Vance (IT Support)",
+      name: "Clara Oswald",
       role: Role.IT_STAFF,
       isActive: true,
-      mustChangePassword: true, // Needs password change on first login
-      department: "IT Services",
-      passwordHash: initialPasswordHash,
+      mustChangePassword: false,
+      department: "IT Networks",
+      passwordHash: defaultPasswordHash,
     },
     {
       email: "staff.inactive@toktickit.com",
@@ -131,11 +131,11 @@ async function main() {
       role: Role.IT_STAFF,
       isActive: false,
       mustChangePassword: false,
-      department: "IT Services",
+      department: "IT Helpdesk",
       passwordHash: defaultPasswordHash,
     },
 
-    // Administrator (1 active)
+    // Administrator
     {
       email: "admin@toktickit.com",
       name: "System Administrator",
@@ -156,28 +156,48 @@ async function main() {
         isActive: u.isActive,
         mustChangePassword: u.mustChangePassword,
         department: u.department,
-        passwordHash: u.passwordHash,
       },
       create: u,
     });
   }
-  console.log(`Seeded ${seedUsers.length} users across Requester, IT Staff, and Administrator roles.`);
+  console.log("Seeded 10 users.");
 
-  // --- Seed Sample Tickets with Ownership ---
-  const catHardware = await prisma.category.findUnique({ where: { code: "HARDWARE" } });
-  const catNetwork = await prisma.category.findUnique({ where: { code: "NETWORK" } });
-  const catSoftware = await prisma.category.findUnique({ where: { code: "SOFTWARE" } });
+  // Retrieve references for tickets
+  const catHardware = await prisma.category.findUnique({ where: { name: "Hardware" } });
+  const catNetwork = await prisma.category.findUnique({ where: { name: "Network" } });
+  const catSoftware = await prisma.category.findUnique({ where: { name: "Software" } });
+  const catAccess = await prisma.category.findUnique({ where: { name: "Account and Access" } });
 
-  const sysLaptop = await prisma.relatedSystem.findUnique({ where: { code: "LAPTOP" } });
-  const sysVPN = await prisma.relatedSystem.findUnique({ where: { code: "VPN" } });
-  const sysEmail = await prisma.relatedSystem.findUnique({ where: { code: "EMAIL" } });
+  const sysLaptop = await prisma.relatedSystem.findUnique({ where: { name: "Corporate Laptop" } });
+  const sysVPN = await prisma.relatedSystem.findUnique({ where: { name: "VPN" } });
+  const sysEmail = await prisma.relatedSystem.findUnique({ where: { name: "Email" } });
+  const sysPrinter = await prisma.relatedSystem.findUnique({ where: { name: "Printer" } });
 
   const reqJennifer = await prisma.user.findUnique({ where: { email: "requester.jennifer@toktickit.com" } });
   const reqMichael = await prisma.user.findUnique({ where: { email: "requester.michael@toktickit.com" } });
+  const reqSarah = await prisma.user.findUnique({ where: { email: "requester.sarah@toktickit.com" } });
+
   const staffAlex = await prisma.user.findUnique({ where: { email: "staff.alex@toktickit.com" } });
   const staffBob = await prisma.user.findUnique({ where: { email: "staff.bob@toktickit.com" } });
+  const staffClara = await prisma.user.findUnique({ where: { email: "staff.clara@toktickit.com" } });
 
-  if (catHardware && catNetwork && catSoftware && sysLaptop && sysVPN && sysEmail && reqJennifer && reqMichael) {
+  if (
+    catHardware &&
+    catNetwork &&
+    catSoftware &&
+    catAccess &&
+    sysLaptop &&
+    sysVPN &&
+    sysEmail &&
+    sysPrinter &&
+    reqJennifer &&
+    reqMichael &&
+    reqSarah &&
+    staffAlex &&
+    staffBob &&
+    staffClara
+  ) {
+    // Tickets covering multiple statuses and ownership (Assigned vs Unassigned)
     const sampleTickets = [
       {
         ticketNumber: "TKT-2026-000001",
@@ -189,7 +209,7 @@ async function main() {
         categoryId: catHardware.id,
         relatedSystemId: sysLaptop.id,
         requesterId: reqJennifer.id,
-        ownerId: staffAlex?.id,
+        ownerId: staffAlex.id,
       },
       {
         ticketNumber: "TKT-2026-000002",
@@ -197,11 +217,11 @@ async function main() {
         description: "VPN client shows timeout error after entering 2FA code.",
         requestedPriority: "HIGH",
         itPriority: "HIGH",
-        currentStatus: "OPEN",
+        currentStatus: "WAITING_FOR_REQUESTER",
         categoryId: catNetwork.id,
         relatedSystemId: sysVPN.id,
         requesterId: reqMichael.id,
-        ownerId: staffBob?.id,
+        ownerId: staffBob.id,
       },
       {
         ticketNumber: "TKT-2026-000003",
@@ -213,39 +233,130 @@ async function main() {
         categoryId: catSoftware.id,
         relatedSystemId: sysEmail.id,
         requesterId: reqJennifer.id,
-        ownerId: null, // Unassigned for testing claim workflow
+        ownerId: null, // Unassigned
+      },
+      {
+        ticketNumber: "TKT-2026-000004",
+        summary: "Floor 3 Network Printer offline",
+        description: "Cannot send print jobs to HP LaserJet on 3rd floor west wing.",
+        requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
+        currentStatus: "OPEN",
+        categoryId: catHardware.id,
+        relatedSystemId: sysPrinter.id,
+        requesterId: reqSarah.id,
+        ownerId: staffAlex.id,
+      },
+      {
+        ticketNumber: "TKT-2026-000005",
+        summary: "VPN access expired after password change",
+        description: "Certificate needs renewal for remote work.",
+        requestedPriority: "HIGH",
+        itPriority: "MEDIUM",
+        currentStatus: "RESOLVED",
+        categoryId: catNetwork.id,
+        relatedSystemId: sysVPN.id,
+        requesterId: reqJennifer.id,
+        ownerId: staffBob.id,
       },
     ];
 
     for (const t of sampleTickets) {
-      const existingTicket = await prisma.ticket.findUnique({ where: { ticketNumber: t.ticketNumber } });
-      if (!existingTicket) {
-        const createdTicket = await prisma.ticket.create({ data: t });
+      let ticket = await prisma.ticket.findUnique({ where: { ticketNumber: t.ticketNumber } });
+      if (!ticket) {
+        ticket = await prisma.ticket.create({ data: t });
+      } else {
+        await prisma.ticket.update({
+          where: { id: ticket.id },
+          data: {
+            currentStatus: t.currentStatus,
+            itPriority: t.itPriority,
+            ownerId: t.ownerId,
+          },
+        });
+      }
 
-        // Add a sample public comment and internal note
-        if (staffAlex) {
-          await prisma.comment.create({
+      // Add Sample Actions Taken
+      // Ticket 1: 2 Actions Taken (demonstrates multi-action & different staff coordinator vs performer)
+      if (t.ticketNumber === "TKT-2026-000001") {
+        const actionCount = await prisma.actionTaken.count({ where: { ticketId: ticket.id } });
+        if (actionCount === 0) {
+          await prisma.actionTaken.create({
             data: {
-              content: "Hello Jennifer, we have received your ticket and are looking into replacement batteries.",
-              ticketId: createdTicket.id,
-              authorId: staffAlex.id,
+              ticketId: ticket.id,
+              actionDateTime: new Date("2026-10-28T10:30:00Z"),
+              actionDescription: "Ran Dell hardware battery diagnostic and verified charge degradation.",
+              result: "Battery health reported at 42% capacity with 820 discharge cycles.",
+              status: "COMPLETED",
+              performedById: staffAlex.id, // Primary owner performed
+              followUpRequired: true,
+              followUpNote: "Order OEM replacement battery kit from certified vendor.",
+              attachmentNotes: "dell_battery_diagnostic.pdf",
             },
           });
 
-          await prisma.internalNote.create({
+          await prisma.actionTaken.create({
             data: {
-              content: "Checked battery cycle count via Dell diagnostics: 820 cycles. Qualifies for warranty replacement.",
-              ticketId: createdTicket.id,
-              authorId: staffAlex.id,
+              ticketId: ticket.id,
+              actionDateTime: new Date("2026-10-29T14:15:00Z"),
+              actionDescription: "Received battery and installed into laptop.",
+              result: "Battery calibrated to 100% capacity. Machine passed full diagnostic run.",
+              status: "COMPLETED",
+              performedById: staffClara.id, // Different IT staff member (satisfies BR-02!)
+              followUpRequired: false,
+              followUpNote: null,
+              attachmentNotes: "post_install_burnin.txt",
+            },
+          });
+        }
+      }
+
+      // Ticket 2: 1 Action Taken with follow up required
+      if (t.ticketNumber === "TKT-2026-000002") {
+        const actionCount = await prisma.actionTaken.count({ where: { ticketId: ticket.id } });
+        if (actionCount === 0) {
+          await prisma.actionTaken.create({
+            data: {
+              ticketId: ticket.id,
+              actionDateTime: new Date("2026-10-29T11:00:00Z"),
+              actionDescription: "Reset Cisco AnyConnect gateway profile and flushed DNS.",
+              result: "Authentication successful from lab test runner.",
+              status: "COMPLETED",
+              performedById: staffBob.id,
+              followUpRequired: true,
+              followUpNote: "Awaiting user verification from residential ISP.",
+              attachmentNotes: "vpn_gateway_logs.log",
+            },
+          });
+        }
+      }
+
+      // Ticket 3: 0 Actions Taken (demonstrates zero-actions card/empty state!)
+      // Ticket 4: 0 Actions Taken
+      // Ticket 5: 1 Action Taken (completed resolution)
+      if (t.ticketNumber === "TKT-2026-000005") {
+        const actionCount = await prisma.actionTaken.count({ where: { ticketId: ticket.id } });
+        if (actionCount === 0) {
+          await prisma.actionTaken.create({
+            data: {
+              ticketId: ticket.id,
+              actionDateTime: new Date("2026-10-27T16:00:00Z"),
+              actionDescription: "Re-issued client SSL certificate and pushed via MDM profile.",
+              result: "Client certificate verified active. User confirmed successful logon.",
+              status: "COMPLETED",
+              performedById: staffBob.id,
+              followUpRequired: false,
+              followUpNote: null,
+              attachmentNotes: null,
             },
           });
         }
       }
     }
-    console.log("Seeded sample tickets with public comments and internal notes.");
+    console.log("Seeded realistic tickets with zero, one, and multiple Actions Taken.");
   }
 
-  console.log("Lab 3 seed complete!");
+  console.log("Lab 4 idempotent seed complete!");
 }
 
 main()

@@ -4,7 +4,7 @@
 
 | Suite / Area | Planned Test File Location | Target Area | Status |
 |---|---|---|:---:|
-| Actions Taken API | `server/tests/lab-04/actions-taken.api.test.ts` | Create, Read, Update, Validation, Performer, Roles | Planned |
+| Actions Taken API | `server/tests/lab-04/actions-taken.api.test.ts` | Create, Read, Update, Validation, Performer, Roles | PASS |
 | Ticket Workflow API | `server/tests/lab-04/ticket-workflow.api.test.ts` | State transitions, Resolution Gate, Stale Conflict | Planned |
 | Requester Dashboard API | `server/tests/lab-04/requester-dashboard.api.test.ts` | Own metric counts, Recent tickets, User data isolation | Planned |
 | IT Staff Dashboard API | `server/tests/lab-04/staff-dashboard.api.test.ts` | Operational metrics, Unassigned, Staff queues | Planned |
