@@ -9,6 +9,8 @@ import { MyTicketsList } from "./components/MyTicketsList";
 import { RequesterTicketDetail } from "./components/RequesterTicketDetail";
 import { StaffTicketQueue } from "./components/StaffTicketQueue";
 import { UserManagement } from "./components/UserManagement";
+import { RequesterDashboard } from "./components/RequesterDashboard";
+import { StaffDashboard } from "./components/StaffDashboard";
 
 type AppView =
   | "login"
@@ -25,6 +27,8 @@ export default function App() {
   const [view, setView] = useState<AppView>("login");
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
+  const [drillDownStatus, setDrillDownStatus] = useState<string>("");
+  const [drillDownOwner, setDrillDownOwner] = useState<string>("");
 
   // Check system state
   const [systemCheckResult, setSystemCheckResult] = useState<{ online: boolean; categories: Category[] } | null>(null);
