@@ -794,6 +794,90 @@ export async function updateUser(userId: number, input: UpdateUserInput, token?:
   return res.json();
 }
 
+// ─── Actions Taken ───
+
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  actionDateTime: string;
+  actionDescription: string;
+  result: string;
+  performedById: number;
+  performedBy?: { id: number; name: string; email: string };
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateActionTakenInput {
+  actionDateTime?: string;
+  actionDescription: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string;
+  attachmentNotes?: string;
+}
+
+export interface UpdateActionTakenInput {
+  actionDescription?: string;
+  result?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string;
+  attachmentNotes?: string;
+}
+
+export async function getActionsTaken(ticketId: number, token?: string): Promise<ActionTaken[]> {
+  const headers: Record<string, string> = {};
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions-taken`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to fetch actions taken");
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function createActionTaken(ticketId: number, input: CreateActionTakenInput, token?: string): Promise<ActionTaken> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions-taken`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to create action taken");
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function updateActionTaken(ticketId: number, actionId: number, input: UpdateActionTakenInput, token?: string): Promise<ActionTaken> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authToken = token || localStorage.getItem("toktickit_token");
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions-taken/${actionId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to update action taken");
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
 export async function resetUserPassword(userId: number, newPassword: string, token?: string): Promise<{ message: string }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const authToken = token || localStorage.getItem("toktickit_token");
