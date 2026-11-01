@@ -18,12 +18,13 @@ export function MyTicketsList({
   categories,
   onCreateTicketClick,
   onSelectTicket,
+  initialStatus,
 }: MyTicketsListProps) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedRequestedPriority, setSelectedRequestedPriority] = useState<string>("");
   const [selectedItPriority, setSelectedItPriority] = useState<string>("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus || "");
   const [page, setPage] = useState<number>(1);
   const [pageSize] = useState<number>(10);
 

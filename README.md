@@ -1,14 +1,14 @@
-# TokTickIT — IT Service Desk Portal (Lab 3)
+# TokTickIT — IT Service Desk Portal (Lab 4 Sprint 4)
 
-TokTickIT is an IT service desk web application built with React, TypeScript, Express, Prisma, PostgreSQL, and Zen Green design system.
+TokTickIT is an IT service desk web application built with React, TypeScript, Express, Prisma, PostgreSQL, and the Zen Green design system.
 
-## What's New in Lab 3
+## What's New in Lab 4 (Sprint 4)
 
-- 🔐 **JWT Authentication** — Email/Password login with bcrypt hashing and mandatory first-login password change
-- 🎭 **Role-Based Authorization (RBAC)** — Requester, IT Staff, and Administrator roles with full access control
-- 🎫 **IT Staff Ticket Queue** — Searchable, filterable, paginated ticket queue with Claim/Assign, IT Priority, and Status Transition workflow
-- 💬 **Public Comments & Internal Notes** — Role-restricted communication on each ticket
-- 🛡️ **Admin User Management** — Create, edit, reset passwords with Safety Rules (no self-deactivation, last-admin protection)
+- 📋 **Actions Taken Work Tracking** — Parent-child work activity logs under Tickets with Performer auto-attribution, Result capture, and dynamic Follow-up requirement validation.
+- 🚦 **Authoritative Ticket Lifecycle & Resolution Gate** — Strict Permitted Status Transition Matrix across 8 statuses, IT Staff resolution gate enforcement, and Requester advisory confirmation endpoint.
+- ⚡ **Optimistic Concurrency & Conflict Protection** — Stale update detection via `expectedUpdatedAt` preventing race condition overwrites (HTTP 409 Conflict).
+- 📊 **Role-Appropriate Operational Dashboards** — Authoritative real-time aggregation metrics for Requesters (isolated personal view) and IT Staff/Administrators with 1-click drill-down filtering to ticket lists.
+- 🛡️ **Product Hardening & Zero-Regression** — Comprehensive test suites across all 4 labs with 100% passing status and complete accessibility compliance under the Zen Green design language.
 
 ---
 
@@ -18,30 +18,35 @@ TokTickIT is an IT service desk web application built with React, TypeScript, Ex
 toktickit/
 ├── client/                      # React + TypeScript + Vite frontend
 │   ├── src/
-│   │   ├── components/          # Lab 2: CreateTicketForm, MyTicketsList, RequesterTicketDetail
-│   │   │                        # Lab 3: LoginScreen, ChangePasswordScreen,
-│   │   │                        #         StaffTicketQueue, UserManagement
-│   │   ├── api.ts               # REST API client (with JWT Bearer Token support)
-│   │   └── App.tsx              # App Shell with Role-Based Navigation
+│   │   ├── components/          # ActionsTaken, RequesterDashboard, StaffDashboard,
+│   │   │                        # MyTicketsList, RequesterTicketDetail, StaffTicketQueue,
+│   │   │                        # CreateTicketForm, LoginScreen, UserManagement
+│   │   ├── api.ts               # REST API client (JWT Bearer Token, actions-taken, dashboards)
+│   │   └── App.tsx              # App Shell with Role-Based Navigation & Dashboard Views
 │   └── tests/
+│       ├── lab-01/              # App foundation tests
 │       ├── lab-02/              # MyTicketsList, CreateTicket, AttachmentSection tests
-│       └── lab-03/              # StaffTicketQueue UI component tests
+│       ├── lab-03/              # StaffTicketQueue UI component tests
+│       └── lab-04/              # ActionsTaken, TicketWorkflow, RequesterDashboard, StaffDashboard
 ├── server/                      # Express + TypeScript + Prisma backend
 │   ├── prisma/                  # Schema, migrations, seed script
-│   │   └── seed.ts              # Seeds 10 users (Requester/IT Staff/Admin) + sample tickets
-│   ├── src/                     # Express app routes & controllers
-│   │   ├── middleware/          # JWT auth middleware, Role authorization guard
-│   │   └── routes/              # auth, staff, tickets, admin routes
+│   │   ├── schema.prisma        # Models: Ticket, User, ActionTaken, Attachment, Comment, etc.
+│   │   └── seed.ts              # Idempotent seed script populating users, tickets & actions
+│   ├── src/                     # Express app routes, middleware & auth
 │   └── tests/
-│       ├── lab-02/              # API & unit tests (tickets, my-tickets, attachments)
-│       └── lab-03/              # auth, staff-queue, tickets-operations, admin-user-management
+│       ├── lab-01/              # Health & categories API tests
+│       ├── lab-02/              # Ticket creation, detail, my-tickets, attachments
+│       ├── lab-03/              # Auth, staff queue, ticket operations, user management
+│       └── lab-04/              # actions-taken, ticket-workflow, requester/staff dashboards
 ├── docs/
-│   ├── lab-02/                  # Lab 2 engineering contracts
-│   └── lab-03/                  # specification.md, api-spec.md, ui-spec.md,
-│                                #  tests.md, reviewer.md, ai-use.md
+│   ├── lab-01/                  # Lab 1 engineering documents
+│   ├── lab-02/                  # Lab 2 engineering documents
+│   ├── lab-03/                  # Lab 3 engineering documents
+│   └── lab-04/                  # specification.md, api-spec.md, ui-spec.md, tests.md, reviewer.md
 ├── e2e/
 │   ├── lab-02/                  # requester-ticket-flow.spec.ts
-│   └── lab-03/                  # staff-ticket-flow.spec.ts
+│   ├── lab-03/                  # staff-ticket-flow.spec.ts, authentication.spec.ts, user-administration.spec.ts
+│   └── lab-04/                  # actions-taken-flow.spec.ts, ticket-resolution.spec.ts, dashboards.spec.ts
 ├── .gitignore
 └── README.md
 ```
@@ -52,7 +57,7 @@ toktickit/
 
 ### Prerequisites
 - Node.js (v18+)
-- Docker (for PostgreSQL) or PostgreSQL server running locally
+- Docker (for PostgreSQL) or PostgreSQL server running locally at `127.0.0.1:5432`
 
 ### 1. Server Setup
 1. Navigate to the `server` directory:
@@ -67,9 +72,9 @@ toktickit/
    ```bash
    cp .env.example .env
    ```
-   *(Update `DATABASE_URL` and `JWT_SECRET` in `.env` as needed)*
+   *(Ensure `DATABASE_URL` contains `connection_limit=20&pool_timeout=30` and `JWT_SECRET` is set)*
 
-4. Run Prisma database migrations & seed:
+4. Run Prisma database migrations & idempotent seed:
    ```bash
    npx prisma db push
    npx prisma db seed
@@ -100,15 +105,15 @@ toktickit/
 
 ## Default Login Credentials (After Seed)
 
-| Role | Email | Password | หมายเหตุ |
+| Role | Email | Password | Status / Note |
 |---|---|---|---|
-| **Administrator** | `admin@toktickit.com` | `Password123!` | Active |
-| **IT Staff** | `staff.alex@toktickit.com` | `Password123!` | Active |
+| **Administrator** | `admin@toktickit.com` | `Password123!` | Active (Access to System Accounts & Staff Queue) |
+| **IT Staff** | `staff.alex@toktickit.com` | `Password123!` | Active (Assigned Owner in Seed Data) |
 | **IT Staff** | `staff.bob@toktickit.com` | `Password123!` | Active |
-| **Requester** | `requester.jennifer@toktickit.com` | `Password123!` | Active |
+| **Requester** | `requester.jennifer@toktickit.com` | `Password123!` | Active (Owns sample tickets) |
 | **Requester** | `requester.michael@toktickit.com` | `Password123!` | Active |
 | **Requester** | `requester.sarah@toktickit.com` | `Password123!` | Active |
-| **Requester** | `requester.david@toktickit.com` | `InitialPassword123!` | ⚠️ ต้องเปลี่ยน Password แรกเข้า |
+| **Requester** | `requester.david@toktickit.com` | `InitialPassword123!` | ⚠️ Forces password change on first login |
 
 ---
 
@@ -116,17 +121,13 @@ toktickit/
 
 - **Backend API & Unit Tests (Vitest + Supertest):**
   ```bash
-  cd server && npm test
+  cd server && npx vitest run --fileParallelism=false
   ```
 - **Frontend Component Tests (Vitest + React Testing Library):**
   ```bash
   cd client && npm test
   ```
-- **E2E Tests — Lab 2 (Playwright):**
+- **E2E Tests — All Labs (Playwright):**
   ```bash
-  npx playwright test e2e/lab-02/
-  ```
-- **E2E Tests — Lab 3 (Playwright):**
-  ```bash
-  npx playwright test e2e/lab-03/
+  npx playwright test e2e/lab-04/
   ```

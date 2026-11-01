@@ -678,13 +678,13 @@ app.patch(
 // ---------------------------------------------------------------------------
 const VALID_TRANSITIONS: Record<string, string[]> = {
   NEW: ["OPEN", "IN_PROGRESS", "CANCELLED"],
-  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
   IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
   WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
   RESOLVED: ["CLOSED", "REOPENED"],
-  CLOSED: ["REOPENED"],
-  REOPENED: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  CANCELLED: ["REOPENED"],
+  REOPENED: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
+  CLOSED: [],
+  CANCELLED: [],
 };
 
 function normalizeStatus(s: string): string {
@@ -704,12 +704,26 @@ app.patch(
         return res.status(400).json({ error: "Invalid ticket ID" });
       }
 
-      const { status, itPriority } = req.body ?? {};
+      const { status, itPriority, expectedUpdatedAt } = req.body ?? {};
       const prisma = getPrisma();
 
       const existingTicket = await prisma.ticket.findUnique({ where: { id: ticketId } });
       if (!existingTicket) {
         return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      // Optimistic concurrency / Stale update check
+      if (expectedUpdatedAt) {
+        const expectedTime = new Date(expectedUpdatedAt).getTime();
+        const actualTime = new Date(existingTicket.updatedAt).getTime();
+        // Allow up to 1000ms clock skew/drift
+        if (Math.abs(actualTime - expectedTime) > 1000) {
+          return res.status(409).json({
+            statusCode: 409,
+            error: "Conflict: Ticket has been modified concurrently by another user",
+            currentUpdatedAt: existingTicket.updatedAt.toISOString(),
+          });
+        }
       }
 
       const updateData: any = {};
@@ -761,7 +775,7 @@ app.patch(
 // POST /api/tickets/:id/resolve-indication (Requester Problem Appears Resolved)
 // ---------------------------------------------------------------------------
 app.post(
-  "/api/tickets/:id/resolve-indication",
+  ["/api/tickets/:id/resolve-indication", "/api/tickets/:id/resolve-advisory"],
   authenticate,
   async (req: Request, res: Response) => {
     try {
@@ -1572,6 +1586,446 @@ app.post(
     } catch (err: any) {
       console.error("Failed to reset password:", err);
       return res.status(500).json({ error: "Failed to reset password" });
+    }
+  }
+);
+
+// ===========================================================================
+// Lab 4 — Actions Taken Endpoints (FR-01, FR-02, FR-03, FR-04, BR-01 to BR-05)
+// ===========================================================================
+
+// GET /api/tickets/:id/actions-taken — Retrieve actions for a ticket
+app.get(
+  "/api/tickets/:id/actions-taken",
+  authenticate,
+  async (req: Request, res: Response) => {
+    try {
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const currentUser = (req as any).user;
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true, requesterId: true },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      // Role check: Requesters can only view actions on their own tickets
+      if (
+        currentUser.role === Role.REQUESTER &&
+        ticket.requesterId !== currentUser.id
+      ) {
+        return res.status(403).json({
+          error: "You are not authorized to view Actions Taken for this ticket",
+        });
+      }
+
+      const actions = await prisma.actionTaken.findMany({
+        where: { ticketId },
+        orderBy: { actionDateTime: "asc" },
+        include: {
+          performedBy: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+          assignedTo: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+        },
+      });
+
+      return res.status(200).json({ data: actions });
+    } catch (err: any) {
+      console.error("Failed to fetch actions taken:", err);
+      return res.status(500).json({ error: "Failed to fetch actions taken" });
+    }
+  }
+);
+
+// POST /api/tickets/:id/actions-taken — Create an Action Taken entry
+app.post(
+  "/api/tickets/:id/actions-taken",
+  authenticate,
+  requireRoles(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const ticketId = parseInt(req.params.id, 10);
+      if (isNaN(ticketId)) {
+        return res.status(400).json({ error: "Invalid ticket ID" });
+      }
+
+      const currentUser = (req as any).user;
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+      if (!ticket) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      const {
+        actionDescription,
+        result,
+        actionDateTime,
+        followUpRequired,
+        followUpNote,
+        attachmentNotes,
+        status,
+        assignedToId,
+      } = req.body ?? {};
+
+      if (!actionDescription || typeof actionDescription !== "string" || actionDescription.trim().length === 0) {
+        return res.status(400).json({ error: "actionDescription is required" });
+      }
+
+      if (!result || typeof result !== "string" || result.trim().length === 0) {
+        return res.status(400).json({ error: "result is required" });
+      }
+
+      const isFollowUp = Boolean(followUpRequired);
+      if (isFollowUp && (!followUpNote || typeof followUpNote !== "string" || followUpNote.trim().length === 0)) {
+        return res.status(400).json({ error: "follow-up note is required when followUpRequired is true" });
+      }
+
+      // Check assignedTo if provided
+      let validAssignedToId: number | null = null;
+      if (assignedToId) {
+        const targetAssignee = await prisma.user.findUnique({ where: { id: Number(assignedToId) } });
+        if (!targetAssignee || !targetAssignee.isActive) {
+          return res.status(400).json({ error: "Assigned user not found or inactive" });
+        }
+        validAssignedToId = targetAssignee.id;
+      }
+
+      const createdAction = await prisma.actionTaken.create({
+        data: {
+          ticketId,
+          actionDescription: actionDescription.trim(),
+          result: result.trim(),
+          actionDateTime: actionDateTime ? new Date(actionDateTime) : new Date(),
+          status: status || "COMPLETED",
+          performedById: currentUser.id, // Auto-set to authenticated user (BR-03)
+          assignedToId: validAssignedToId,
+          followUpRequired: isFollowUp,
+          followUpNote: isFollowUp ? followUpNote.trim() : null,
+          attachmentNotes: attachmentNotes ? String(attachmentNotes).trim() : null,
+        },
+        include: {
+          performedBy: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+          assignedTo: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+        },
+      });
+
+      return res.status(201).json({
+        message: "Action Taken recorded successfully",
+        data: createdAction,
+      });
+    } catch (err: any) {
+      console.error("Failed to create action taken:", err);
+      return res.status(500).json({ error: "Failed to create action taken" });
+    }
+  }
+);
+
+// PATCH /api/tickets/:id/actions-taken/:actionId — Update Action Taken entry
+app.patch(
+  "/api/tickets/:id/actions-taken/:actionId",
+  authenticate,
+  requireRoles(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const ticketId = parseInt(req.params.id, 10);
+      const actionId = parseInt(req.params.actionId, 10);
+
+      if (isNaN(ticketId) || isNaN(actionId)) {
+        return res.status(400).json({ error: "Invalid ticket or action ID" });
+      }
+
+      const prisma = getPrisma();
+      const existingAction = await prisma.actionTaken.findFirst({
+        where: { id: actionId, ticketId },
+      });
+
+      if (!existingAction) {
+        return res.status(404).json({ error: "Action Taken record not found" });
+      }
+
+      const {
+        actionDescription,
+        result,
+        actionDateTime,
+        followUpRequired,
+        followUpNote,
+        attachmentNotes,
+        status,
+        assignedToId,
+      } = req.body ?? {};
+
+      const updateData: any = {};
+
+      if (actionDescription !== undefined) {
+        if (typeof actionDescription !== "string" || actionDescription.trim().length === 0) {
+          return res.status(400).json({ error: "actionDescription cannot be empty" });
+        }
+        updateData.actionDescription = actionDescription.trim();
+      }
+
+      if (result !== undefined) {
+        if (typeof result !== "string" || result.trim().length === 0) {
+          return res.status(400).json({ error: "result cannot be empty" });
+        }
+        updateData.result = result.trim();
+      }
+
+      if (actionDateTime !== undefined) {
+        updateData.actionDateTime = new Date(actionDateTime);
+      }
+
+      if (status !== undefined) {
+        updateData.status = String(status).trim();
+      }
+
+      if (attachmentNotes !== undefined) {
+        updateData.attachmentNotes = attachmentNotes ? String(attachmentNotes).trim() : null;
+      }
+
+      // Follow-up validation logic
+      const isFollowUp = followUpRequired !== undefined ? Boolean(followUpRequired) : existingAction.followUpRequired;
+      if (isFollowUp) {
+        const noteToValidate = followUpNote !== undefined ? followUpNote : existingAction.followUpNote;
+        if (!noteToValidate || typeof noteToValidate !== "string" || noteToValidate.trim().length === 0) {
+          return res.status(400).json({ error: "follow-up note is required when followUpRequired is true" });
+        }
+        updateData.followUpRequired = true;
+        updateData.followUpNote = noteToValidate.trim();
+      } else if (followUpRequired !== undefined) {
+        updateData.followUpRequired = false;
+        updateData.followUpNote = null;
+      }
+
+      if (assignedToId !== undefined) {
+        if (assignedToId === null) {
+          updateData.assignedToId = null;
+        } else {
+          const assignee = await prisma.user.findUnique({ where: { id: Number(assignedToId) } });
+          if (!assignee || !assignee.isActive) {
+            return res.status(400).json({ error: "Assigned user not found or inactive" });
+          }
+          updateData.assignedToId = assignee.id;
+        }
+      }
+
+      const updatedAction = await prisma.actionTaken.update({
+        where: { id: actionId },
+        data: updateData,
+        include: {
+          performedBy: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+          assignedTo: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+        },
+      });
+
+      return res.status(200).json({
+        message: "Action Taken updated successfully",
+        data: updatedAction,
+      });
+    } catch (err: any) {
+      console.error("Failed to update action taken:", err);
+      return res.status(500).json({ error: "Failed to update action taken" });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/dashboards/requester
+// ---------------------------------------------------------------------------
+app.get("/api/dashboards/requester", authenticate, async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const userId = req.user!.id;
+
+    // totalOpenTickets: NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, REOPENED
+    const [
+      totalOpenTickets,
+      inProgressTickets,
+      waitingForRequesterTickets,
+      resolvedTickets,
+      closedTickets,
+      recentTicketsRaw,
+    ] = await Promise.all([
+      prisma.ticket.count({
+        where: {
+          requesterId: userId,
+          currentStatus: { in: ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"] },
+        },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "IN_PROGRESS" },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "WAITING_FOR_REQUESTER" },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "RESOLVED" },
+      }),
+      prisma.ticket.count({
+        where: { requesterId: userId, currentStatus: "CLOSED" },
+      }),
+      prisma.ticket.findMany({
+        where: { requesterId: userId },
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+        include: {
+          category: true,
+        },
+      }),
+    ]);
+
+    const recentTickets = recentTicketsRaw.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      title: t.summary,
+      status: t.currentStatus,
+      priority: t.requestedPriority,
+      categoryName: t.category?.name || "General",
+      updatedAt: t.updatedAt.toISOString(),
+      createdAt: t.createdAt.toISOString(),
+    }));
+
+    return res.status(200).json({
+      metrics: {
+        totalOpenTickets,
+        inProgressTickets,
+        waitingForRequesterTickets,
+        resolvedTickets,
+        closedTickets,
+      },
+      recentTickets,
+    });
+  } catch (err: any) {
+    console.error("Failed to fetch requester dashboard:", err);
+    return res.status(500).json({ error: "Failed to fetch requester dashboard metrics" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/dashboards/staff
+// ---------------------------------------------------------------------------
+app.get(
+  "/api/dashboards/staff",
+  authenticate,
+  requireRoles(Role.IT_STAFF, Role.ADMINISTRATOR),
+  async (req: Request, res: Response) => {
+    try {
+      const prisma = getPrisma();
+      const userId = req.user!.id;
+      const isAdmin = req.user!.role === Role.ADMINISTRATOR;
+
+      const [
+        newCount,
+        openCount,
+        inProgressCount,
+        waitingForRequesterCount,
+        myAssignedCount,
+        unassignedCount,
+        highPriorityCount,
+        criticalPriorityCount,
+        recentTicketsRaw,
+      ] = await Promise.all([
+        prisma.ticket.count({ where: { currentStatus: "NEW" } }),
+        prisma.ticket.count({ where: { currentStatus: "OPEN" } }),
+        prisma.ticket.count({ where: { currentStatus: "IN_PROGRESS" } }),
+        prisma.ticket.count({ where: { currentStatus: "WAITING_FOR_REQUESTER" } }),
+        prisma.ticket.count({
+          where: {
+            ownerId: userId,
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            ownerId: null,
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            itPriority: "HIGH",
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            itPriority: { in: ["CRITICAL", "URGENT"] },
+            currentStatus: { notIn: ["CLOSED", "CANCELLED"] },
+          },
+        }),
+        prisma.ticket.findMany({
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          include: {
+            category: true,
+            requester: true,
+            owner: true,
+          },
+        }),
+      ]);
+
+      let userSummary: any = undefined;
+      if (isAdmin) {
+        const [totalUsers, activeStaff, activeRequesters] = await Promise.all([
+          prisma.user.count(),
+          prisma.user.count({ where: { role: { in: [Role.IT_STAFF, Role.ADMINISTRATOR] }, isActive: true } }),
+          prisma.user.count({ where: { role: Role.REQUESTER, isActive: true } }),
+        ]);
+        userSummary = {
+          totalUsers,
+          activeStaff,
+          activeRequesters,
+        };
+      }
+
+      const recentTickets = recentTicketsRaw.map((t) => ({
+        id: t.id,
+        ticketNumber: t.ticketNumber,
+        title: t.summary,
+        status: t.currentStatus,
+        itPriority: t.itPriority,
+        categoryName: t.category?.name || "General",
+        requesterName: t.requester?.name || "Unknown",
+        assignedStaffName: t.owner?.name || "Unassigned",
+        updatedAt: t.updatedAt.toISOString(),
+      }));
+
+      return res.status(200).json({
+        metrics: {
+          newCount,
+          openCount,
+          inProgressCount,
+          waitingForRequesterCount,
+          myAssignedCount,
+          unassignedCount,
+          highPriorityCount,
+          criticalPriorityCount,
+        },
+        recentTickets,
+        ...(userSummary ? { userSummary } : {}),
+      });
+    } catch (err: any) {
+      console.error("Failed to fetch staff dashboard:", err);
+      return res.status(500).json({ error: "Failed to fetch staff dashboard metrics" });
     }
   }
 );
