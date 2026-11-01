@@ -678,13 +678,13 @@ app.patch(
 // ---------------------------------------------------------------------------
 const VALID_TRANSITIONS: Record<string, string[]> = {
   NEW: ["OPEN", "IN_PROGRESS", "CANCELLED"],
-  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
   IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
   WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
   RESOLVED: ["CLOSED", "REOPENED"],
-  CLOSED: ["REOPENED"],
-  REOPENED: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  CANCELLED: ["REOPENED"],
+  REOPENED: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
+  CLOSED: [],
+  CANCELLED: [],
 };
 
 function normalizeStatus(s: string): string {
@@ -704,12 +704,26 @@ app.patch(
         return res.status(400).json({ error: "Invalid ticket ID" });
       }
 
-      const { status, itPriority } = req.body ?? {};
+      const { status, itPriority, expectedUpdatedAt } = req.body ?? {};
       const prisma = getPrisma();
 
       const existingTicket = await prisma.ticket.findUnique({ where: { id: ticketId } });
       if (!existingTicket) {
         return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      // Optimistic concurrency / Stale update check
+      if (expectedUpdatedAt) {
+        const expectedTime = new Date(expectedUpdatedAt).getTime();
+        const actualTime = new Date(existingTicket.updatedAt).getTime();
+        // Allow up to 1000ms clock skew/drift
+        if (Math.abs(actualTime - expectedTime) > 1000) {
+          return res.status(409).json({
+            statusCode: 409,
+            error: "Conflict: Ticket has been modified concurrently by another user",
+            currentUpdatedAt: existingTicket.updatedAt.toISOString(),
+          });
+        }
       }
 
       const updateData: any = {};
@@ -761,7 +775,7 @@ app.patch(
 // POST /api/tickets/:id/resolve-indication (Requester Problem Appears Resolved)
 // ---------------------------------------------------------------------------
 app.post(
-  "/api/tickets/:id/resolve-indication",
+  ["/api/tickets/:id/resolve-indication", "/api/tickets/:id/resolve-advisory"],
   authenticate,
   async (req: Request, res: Response) => {
     try {
